@@ -4,7 +4,6 @@ import { message, unitName, loadData } from './store.js';
 
 import SkladTab from './components/SkladTab.vue';
 import LogTab from './components/LogTab.vue';
-import StatTab from './components/StatTab.vue';
 import ExcelTab from './components/ExcelTab.vue';
 
 const activeTab = ref('sklad');

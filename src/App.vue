@@ -4,14 +4,15 @@ import * as XLSX from 'xlsx'
 import { supabase } from './supabase.js'
 
 // Список обладнання на позиції.
-// kit: номер KIT вручну (кожен Старлінк додається окремо); router: необов'язкове поле «роутер» з кількістю
+// kit: номер KIT вручну (кожен Старлінк додається окремо);
+// extra: необов'язкова додаткова позиція з кількістю (роутер до Старлінка, павук до рації), зберігається окремим записом
 // variants: список видів (обов'язковий вибір); freeName: вільна назва; needsSerial: серійний номер (noBrand: без марки);
 // unit: одиниця виміру ('л', 'м'; за замовчуванням шт.)
 const PRESET_ITEMS = [
-  { name: 'Старлінк', category: 'Зв\'язок', kit: true, router: true, variantLabel: 'версію', variants: ['Міні', '2 версія', '3 версія'] },
+  { name: 'Старлінк', category: 'Зв\'язок', kit: true, extra: { name: 'Роутер Старлінк', label: 'Роутер', plural: 'роутерів' }, variantLabel: 'версію', variants: ['Міні', '2 версія', '3 версія'] },
   { name: 'Генератор', category: 'Живлення' },
   { name: 'Зарядні станції (EcoFlow)', category: 'Живлення', needsSerial: true },
-  { name: 'Рація + павук', category: 'Зв\'язок', needsSerial: true },
+  { name: 'Рація', category: 'Зв\'язок', needsSerial: true, extra: { name: 'Павук', label: 'Павук', plural: 'павуків' } },
   { name: 'Камера спостереження', category: 'Зв\'язок' },
   { name: 'Антена', category: 'Зв\'язок', freeName: true },
   { name: 'Репітор', category: 'Зв\'язок' },
@@ -84,8 +85,7 @@ const serial = ref('')
 const variant = ref('')
 const customName = ref('')
 const kitNumbers = ref('')
-const routerQty = ref('')
-const ROUTER_NAME = 'Роутер Старлінк'
+const extraQty = ref('')
 const currentPreset = computed(() => PRESET_ITEMS.find(p => p.name === selectedPresetItem.value))
 // Пункт за повною назвою запису: «Дрони — Mavic 3T» -> пресет «Дрони»
 const presetOf = fullName => {
@@ -158,11 +158,10 @@ const onPresetChange = () => {
   variant.value = ''
   customName.value = ''
   kitNumbers.value = ''
-  routerQty.value = ''
+  extraQty.value = ''
   if (preset && (preset.needsSerial || preset.kit)) quantity.value = 1
 }
 
-// Роутер до Старлінка: окремий запис з власною кількістю (додається до наявного, якщо такий уже є)
 // Повідомлення про помилку вставки (унікальний серійний номер / KIT або дублікат запису)
 const insertErrorText = error => {
   if (error.code === '23505') {
@@ -171,19 +170,35 @@ const insertErrorText = error => {
   return 'Помилка бази: ' + error.message
 }
 
-const addRouter = async n => {
+// Додаткова позиція до основної (роутер до Старлінка, павук до рації): окремий запис з власною кількістю,
+// додається до наявного, якщо такий уже є з тим самим статусом
+const addExtra = async (preset, n) => {
   const pos = selectedPositionName.value
+  const name = preset.extra.name
   const { data: same, error: findErr } = await supabase.from('items').select('id, quantity')
-    .eq('position_name', pos).eq('item_name', ROUTER_NAME).eq('status', status.value).limit(1)
+    .eq('position_name', pos).eq('item_name', name).eq('status', status.value).limit(1)
   if (findErr) return findErr.message
   if (same && same.length) {
     const { error } = await supabase.from('items').update({ quantity: Number(same[0].quantity) + n }).eq('id', same[0].id)
     return error ? error.message : null
   }
   const { error } = await supabase.from('items').insert([
-    { position_name: pos, category: category.value, item_name: ROUTER_NAME, status: status.value, quantity: n, notes: '' }
+    { position_name: pos, category: category.value, item_name: name, status: status.value, quantity: n, notes: '' }
   ])
   return error ? error.message : null
+}
+
+// Кількість додаткової позиції з форми: 0 = не додавати, null = помилка введення
+const parseExtraQty = preset => {
+  if (!preset || !preset.extra) return 0
+  const raw = String(extraQty.value === null || extraQty.value === undefined ? '' : extraQty.value).trim()
+  if (raw === '') return 0
+  const n = Number(raw)
+  if (!Number.isInteger(n) || n < 0) {
+    showMsg(`Кількість ${preset.extra.plural} має бути цілим числом`, true)
+    return null
+  }
+  return n
 }
 
 // Старлінк: версія + один номер KIT (кожен Старлінк додається окремо) + необов'язковий роутер
@@ -194,12 +209,8 @@ const addKitItems = async preset => {
   if (!kit) { showMsg('Вкажіть номер KIT', true); return }
   if (/[,;\n]/.test(kit)) { showMsg('Вводьте один номер KIT: кожен Старлінк додається окремо', true); return }
 
-  let routers = 0
-  const rawRouter = String(routerQty.value === null || routerQty.value === undefined ? '' : routerQty.value).trim()
-  if (preset.router && rawRouter !== '') {
-    routers = Number(rawRouter)
-    if (!Number.isInteger(routers) || routers < 0) { showMsg('Кількість роутерів має бути цілим числом', true); return }
-  }
+  const extraN = parseExtraQty(preset)
+  if (extraN === null) return
 
   // Номер KIT унікальний на всіх позиціях і версіях
   const { data: existing, error: exErr } = await supabase.from('items').select('item_name, position_name, variant, brand, serial').like('item_name', `${preset.name} — %`)
@@ -223,17 +234,17 @@ const addKitItems = async preset => {
     return
   }
 
-  let routerMsg = ''
-  let routerFailed = false
-  if (routers > 0) {
-    const routerErr = await addRouter(routers)
-    if (routerErr) { routerFailed = true; routerMsg = `. Роутер не додано: ${routerErr}` }
-    else routerMsg = ` і роутерів: ${routers}`
+  let extraMsg = ''
+  let extraFailed = false
+  if (extraN > 0) {
+    const extraErr = await addExtra(preset, extraN)
+    if (extraErr) { extraFailed = true; extraMsg = `. ${preset.extra.label} не додано: ${extraErr}` }
+    else extraMsg = ` і ${preset.extra.plural}: ${extraN}`
   }
   notes.value = ''
   kitNumbers.value = ''
-  routerQty.value = ''
-  showMsg(`Додано «${preset.name} — ${variant.value}», KIT ${kit}${routerMsg}`, routerFailed)
+  extraQty.value = ''
+  showMsg(`Додано «${preset.name} — ${variant.value}», KIT ${kit}${extraMsg}`, extraFailed)
   loadItems()
 }
 
@@ -246,6 +257,7 @@ const addItem = async () => {
   let fullName = selectedPresetItem.value
   let qty = round2(quantity.value === '' || quantity.value === null ? NaN : quantity.value)
   let cols = {}
+  let extraN = 0
 
   if (preset && preset.kit) {
     await addKitItems(preset)
@@ -261,6 +273,8 @@ const addItem = async () => {
     fullName = preset.noBrand ? `${preset.name} — S/N ${sn}` : `${preset.name} — ${b}, S/N ${sn}`
     qty = 1
     cols = { brand: b || null, serial: sn }
+    extraN = parseExtraQty(preset)
+    if (extraN === null) return
 
     // Один серійний номер = один запис (на жодній з позицій)
     const { data: dup, error: dupErr } = await supabase.from('items').select('item_name, position_name, variant, brand, serial').like('item_name', `${preset.name} — %`)
@@ -344,7 +358,15 @@ const addItem = async () => {
     quantity.value = 1
     serial.value = ''
     customName.value = ''
-    showMsg('Додано на позицію!')
+    extraQty.value = ''
+    let extraMsg = ''
+    let extraFailed = false
+    if (extraN > 0) {
+      const extraErr = await addExtra(preset, extraN)
+      if (extraErr) { extraFailed = true; extraMsg = ` ${preset.extra.label} не додано: ${extraErr}` }
+      else extraMsg = ` + ${preset.extra.plural}: ${extraN}`
+    }
+    showMsg(`Додано на позицію!${extraMsg}`, extraFailed)
     loadItems()
   }
 }
@@ -578,9 +600,9 @@ const exportExcel = async () => {
 
 <input v-if="currentPreset && currentPreset.kit" v-model="kitNumbers" placeholder="Номер KIT *" class="styled-input" />
 
-<div v-if="currentPreset && currentPreset.router" class="router-row">
-<label class="router-label">Роутер (необов'язково):</label>
-<input type="number" v-model="routerQty" min="0" step="1" placeholder="К-ть роутерів" class="styled-input qty-input" />
+<div v-if="currentPreset && currentPreset.extra" class="router-row">
+<label class="router-label">{{ currentPreset.extra.label }} (необов'язково):</label>
+<input type="number" v-model="extraQty" min="0" step="1" :placeholder="'К-ть: ' + currentPreset.extra.plural" class="styled-input qty-input" />
 </div>
 
                                                                                                                 <select v-model="status" class="styled-select status-select">

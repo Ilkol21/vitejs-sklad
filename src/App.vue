@@ -61,7 +61,7 @@ const PRESET_ITEMS = [
   { name: 'Бензин', category: 'Витратні матеріали', unit: 'л' },
   { name: 'Масло', category: 'Витратні матеріали', unit: 'л' },
   { name: 'Розпорки для дронів', category: 'БПЛА', presence: true },
-  { name: 'Кріплення на спирку', category: 'Інше', presence: true },
+  { name: 'Кріплення на спинку', category: 'Інше', presence: true },
   { name: 'Ремінь на кріплення', category: 'Інше', presence: true },
   { name: 'Посуд', category: 'Спорядження', presence: true },
   { name: 'Мультитул', category: 'Інструменти', presence: true },

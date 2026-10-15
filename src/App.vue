@@ -4,10 +4,11 @@ import * as XLSX from 'xlsx'
 import { supabase } from './supabase.js'
 
 // Список обладнання на позиції.
+// kit: номери KIT вручну (кілька через кому, кожен = окремий запис); router: необов'язкове поле «роутер» з кількістю
 // variants: список видів (обов'язковий вибір); freeName: вільна назва; needsSerial: серійний номер (noBrand: без марки);
 // unit: одиниця виміру ('л', 'м'; за замовчуванням шт.)
 const PRESET_ITEMS = [
-  { name: 'Старлінк', category: 'Зв\'язок' },
+  { name: 'Старлінк', category: 'Зв\'язок', kit: true, router: true, variantLabel: 'версію', variants: ['Міні', '2 версія', '3 версія'] },
   { name: 'Генератор', category: 'Живлення' },
   { name: 'Зарядні станції (EcoFlow)', category: 'Живлення', needsSerial: true },
   { name: 'Рація + павук', category: 'Зв\'язок', needsSerial: true },
@@ -82,6 +83,9 @@ const brand = ref('')
 const serial = ref('')
 const variant = ref('')
 const customName = ref('')
+const kitNumbers = ref('')
+const routerQty = ref('')
+const ROUTER_NAME = 'Роутер Старлінк'
 const currentPreset = computed(() => PRESET_ITEMS.find(p => p.name === selectedPresetItem.value))
 // Пункт за повною назвою запису: «Дрони — Mavic 3T» -> пресет «Дрони»
 const presetOf = fullName => {
@@ -153,8 +157,78 @@ const onPresetChange = () => {
   serial.value = ''
   variant.value = ''
   customName.value = ''
-  if (preset && preset.needsSerial) quantity.value = 1
+  kitNumbers.value = ''
+  routerQty.value = ''
+  if (preset && (preset.needsSerial || preset.kit)) quantity.value = 1
 }
+
+// Роутер до Старлінка: окремий запис з власною кількістю (додається до наявного, якщо такий уже є)
+const addRouter = async n => {
+  const pos = selectedPositionName.value
+  const { data: same, error: findErr } = await supabase.from('items').select('id, quantity')
+    .eq('position_name', pos).eq('item_name', ROUTER_NAME).eq('status', status.value).limit(1)
+  if (findErr) return findErr.message
+  if (same && same.length) {
+    const { error } = await supabase.from('items').update({ quantity: Number(same[0].quantity) + n }).eq('id', same[0].id)
+    return error ? error.message : null
+  }
+  const { error } = await supabase.from('items').insert([
+    { position_name: pos, category: category.value, item_name: ROUTER_NAME, status: status.value, quantity: n, notes: '' }
+  ])
+  return error ? error.message : null
+}
+
+// Старлінки: версія + номери KIT (кожен номер = окремий запис) + необов'язковий роутер
+const addKitItems = async preset => {
+  if (!variant.value) { showMsg(`Оберіть ${preset.variantLabel || 'вид'}`, true); return }
+
+  const kits = kitNumbers.value.split(/[,;\n]+/).map(k => k.trim()).filter(Boolean)
+  if (!kits.length) { showMsg('Вкажіть номер KIT', true); return }
+  const upper = kits.map(k => k.toUpperCase())
+  if (new Set(upper).size !== kits.length) { showMsg('Номери KIT повторюються', true); return }
+
+  let routers = 0
+  const rawRouter = String(routerQty.value === null || routerQty.value === undefined ? '' : routerQty.value).trim()
+  if (preset.router && rawRouter !== '') {
+    routers = Number(rawRouter)
+    if (!Number.isInteger(routers) || routers < 0) { showMsg('Кількість роутерів має бути цілим числом', true); return }
+  }
+
+  // Номер KIT унікальний на всіх позиціях і версіях
+  const { data: existing, error: exErr } = await supabase.from('items').select('item_name, position_name').like('item_name', `${preset.name} — %`)
+  if (exErr) { showMsg('Помилка перевірки: ' + exErr.message, true); return }
+  for (const row of existing || []) {
+    const kit = parseItemName(row.item_name).serial.toUpperCase()
+    const i = kit ? upper.indexOf(kit) : -1
+    if (i >= 0) { showMsg(`Такий KIT уже є: ${kits[i]} (${row.position_name})`, true); return }
+  }
+
+  const { error } = await supabase.from('items').insert(kits.map(k => ({
+    position_name: selectedPositionName.value,
+    category: category.value,
+    item_name: `${preset.name} — ${variant.value}, KIT ${k}`,
+    status: status.value,
+    quantity: 1,
+    notes: notes.value
+  })))
+  if (error) {
+    console.error('SUPABASE ERROR:', error)
+    showMsg(error.code === '23505' ? 'Такий запис уже є, оновіть сторінку' : 'Помилка бази: ' + error.message, true)
+    return
+  }
+
+  let routerMsg = ''
+  if (routers > 0) {
+    const routerErr = await addRouter(routers)
+    routerMsg = routerErr ? `. Роутер не додано: ${routerErr}` : ` і роутерів: ${routers}`
+  }
+  notes.value = ''
+  kitNumbers.value = ''
+  routerQty.value = ''
+  showMsg(`Додано «${preset.name}»: ${kits.length} шт.${routerMsg}`, !!routerMsg && routerMsg.startsWith('.'))
+  loadItems()
+}
+
 
 // Додавання на позицію з виведенням точної помилки
 const addItem = async () => {
@@ -163,6 +237,11 @@ const addItem = async () => {
   const preset = currentPreset.value
   let fullName = selectedPresetItem.value
   let qty = round2(quantity.value === '' || quantity.value === null ? NaN : quantity.value)
+
+  if (preset && preset.kit) {
+    await addKitItems(preset)
+    return
+  }
 
   if (preset && preset.needsSerial) {
     const b = brand.value.trim()
@@ -324,8 +403,9 @@ const parseItemName = full => {
   if (i < 0) return { base: s, detail: '', brand: '', serial: '' }
   const base = s.slice(0, i)
   const rest = s.slice(i + 3)
-  const m = rest.match(/^(?:(.*?),\s*)?S\/N\s+(.+)$/)
-  if (m) return { base, detail: '', brand: (m[1] || '').trim(), serial: m[2].trim() }
+  const m = rest.match(/^(?:(.*?),\s*)?(S\/N|KIT)\s+(.+)$/)
+  if (m && m[2] === 'KIT') return { base, detail: (m[1] || '').trim(), brand: '', serial: m[3].trim() }
+  if (m) return { base, detail: '', brand: (m[1] || '').trim(), serial: m[3].trim() }
   return { base, detail: rest, brand: '', serial: '' }
 }
 
@@ -345,7 +425,7 @@ const buildReportRows = list => {
       'Найменування': p.base,
       'Вид / модель / назва': p.detail,
       'Марка': p.brand,
-      'Серійний номер': p.serial,
+      'Серійний номер / KIT': p.serial,
       'Статус': item.status,
       'Кількість': Number(item.quantity),
       'Од.': unitOf(item.item_name),
@@ -423,6 +503,13 @@ const exportExcel = async () => {
 
           <input v-if="currentPreset && currentPreset.freeName" v-model="customName" placeholder="Назва *" class="styled-input" />
 
+<input v-if="currentPreset && currentPreset.kit" v-model="kitNumbers" placeholder="Номер KIT * (кілька через кому)" class="styled-input" />
+
+<div v-if="currentPreset && currentPreset.router" class="router-row">
+<label class="router-label">Роутер (необов'язково):</label>
+<input type="number" v-model="routerQty" min="0" step="1" placeholder="К-ть роутерів" class="styled-input qty-input" />
+</div>
+
                                                                                                                 <select v-model="status" class="styled-select status-select">
                                                                                                                             <option value="На позиції">🟢 На позиції</option>
                                                                                                                                         <option value="Потреба">🟡 Потреба</option>
@@ -430,7 +517,7 @@ const exportExcel = async () => {
                                                                                                                                                               </select>
 
                                                                                                                                                                         <div class="qty-notes-row">
-                                                                                                                                                                                    <input type="number" v-model="quantity" :disabled="currentPreset && currentPreset.needsSerial" min="0" :step="currentPreset && currentPreset.unit ? '0.1' : '1'" :placeholder="currentPreset && currentPreset.unit === 'л' ? 'Літри' : (currentPreset && currentPreset.unit === 'м' ? 'Метри' : 'К-ть')" class="styled-input qty-input font-bold" />
+                                                                                                                                                                                    <input type="number" v-model="quantity" :disabled="currentPreset && (currentPreset.needsSerial || currentPreset.kit)" min="0" :step="currentPreset && currentPreset.unit ? '0.1' : '1'" :placeholder="currentPreset && currentPreset.unit === 'л' ? 'Літри' : (currentPreset && currentPreset.unit === 'м' ? 'Метри' : 'К-ть')" class="styled-input qty-input font-bold" />
                                                                                                                                                                                                 <input v-model="notes" placeholder="Примітки / номер" class="styled-input notes-input" />
                                                                                                                                                                                                           </div>
 
@@ -551,7 +638,9 @@ const exportExcel = async () => {
 .no-stock { font-size: 11px; font-weight: 700; color: #991b1b; background: #fef2f2; border-radius: 4px; margin-top: 2px; padding: 1px 4px; }
 .del-btn { color: #dc2626; background: #fee2e2; border: none; cursor: pointer; font-weight: bold; font-size: 13px; padding: 6px 10px; border-radius: 6px; }
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    .report-scope { margin-top: 10px; }
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    .router-row { display: flex; align-items: center; gap: 8px; }
+.router-label { font-size: 12px; font-weight: 600; color: #475569; }
+.report-scope { margin-top: 10px; }
 .report-select { width: 100%; }
 .excel-footer-box { background: #f8fafc; border: 1px solid #e2e8f0; padding: 14px; border-radius: 8px; }
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     .text-center { text-align: center; }

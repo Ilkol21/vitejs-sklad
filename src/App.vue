@@ -8,6 +8,7 @@ import { supabase } from './supabase.js'
 // extra: необов'язкова додаткова позиція з кількістю (роутер до Старлінка, павук до рації), зберігається окремим записом
 // variants: список видів (обов'язковий вибір); freeName: вільна назва; needsSerial: серійний номер (noBrand: без марки);
 // hasModel: окреме поле «Модель» (brandLabel: підпис поля марки/назви); в Excel назва і модель йдуть в одну колонку «Марка»
+// presence: без підрахунку, лише «Є / Немає» (у базі 1 або 0)
 // unit: одиниця виміру ('л'; за замовчуванням шт.); lengthM: довжина одного відрізка в метрах + кількість відрізків
 const PRESET_ITEMS = [
   { name: 'Старлінк', category: 'Зв\'язок', kit: true, extra: { name: 'Роутер Старлінк', label: 'Роутер', plural: 'роутерів' }, variantLabel: 'версію', variants: ['Міні', '2 версія', '3 версія'] },
@@ -44,9 +45,9 @@ const PRESET_ITEMS = [
   { name: 'Переноски', category: 'Живлення', variants: ['Велика на котушці', 'Мала'] },
   { name: 'Зіп до генератора', category: 'Живлення' },
   { name: 'Трійники', category: 'Живлення' },
-  { name: 'Світло', category: 'Живлення' },
-  { name: 'Лопасті', category: 'БПЛА' },
-  { name: 'Стяжки', category: 'Витратні матеріали' },
+  { name: 'Світло', category: 'Живлення', presence: true },
+  { name: 'Лопасті', category: 'БПЛА', presence: true },
+  { name: 'Стяжки', category: 'Витратні матеріали', presence: true },
   { name: 'Ізолента', category: 'Витратні матеріали' },
   { name: 'Сітка від РПВ', category: 'Спорядження' },
   { name: 'Спальники', category: 'Спорядження' },
@@ -98,6 +99,9 @@ const unitOf = name => { const p = presetOf(name); return (p && p.unit) || 'шт
 // Літри й метри можуть бути дробовими, решта лише цілими
 const allowsDecimal = name => unitOf(name) === 'л' || unitOf(name) === 'м'
 const isLiters = name => unitOf(name) === 'л'
+const isPresence = name => { const p = presetOf(name); return !!(p && p.presence) }
+// Кількість для тексту: для «Є / Немає» слово, для решти число з одиницею
+const qtyText = (name, q) => (isPresence(name) ? (Number(q) > 0 ? 'є' : 'немає') : `${q} ${unitOf(name)}`)
 const round2 = n => Math.round(Number(n) * 100) / 100
 
 const items = ref([])
@@ -162,7 +166,7 @@ const onPresetChange = () => {
   lengthM.value = ''
   kitNumbers.value = ''
   extraQty.value = ''
-  if (preset && (preset.needsSerial || preset.kit)) quantity.value = 1
+  if (preset && (preset.needsSerial || preset.kit || preset.presence)) quantity.value = 1
 }
 
 // Повідомлення про помилку вставки (унікальний серійний номер / KIT або дублікат запису)
@@ -328,6 +332,14 @@ const addItem = async () => {
     }
     if (same && same.length) {
       const row = same[0]
+      if (preset && preset.presence) {
+        const { error: pErr } = await supabase.from('items').update({ quantity: qty > 0 ? 1 : 0 }).eq('id', row.id)
+        if (pErr) { showMsg('Помилка оновлення: ' + pErr.message, true); return }
+        quantity.value = 1
+        showMsg(`${preset.name}: ${qty > 0 ? 'є' : 'немає'}`)
+        loadItems()
+        return
+      }
       if (qty === 0) {
         showMsg(`Уже є: ${row.quantity} ${unitOf(fullName)}. Щоб позначити, що немає, змініть кількість у таблиці на 0`, true)
         return
@@ -410,7 +422,7 @@ const updateItemStatus = async (id, newStatus) => {
   }
   if (same && same.length) {
     const target = same[0]
-    const total = round2(Number(target.quantity) + Number(current.quantity))
+    const total = isPresence(current.item_name) ? Math.max(Number(target.quantity), Number(current.quantity)) : round2(Number(target.quantity) + Number(current.quantity))
     const { error: mergeErr } = await supabase.from('items').update({ quantity: total }).eq('id', target.id)
     if (mergeErr) {
       showMsg('Помилка об\'єднання: ' + mergeErr.message, true)
@@ -419,7 +431,7 @@ const updateItemStatus = async (id, newStatus) => {
     }
     const { error: delErr } = await supabase.from('items').delete().eq('id', id)
     if (delErr) showMsg('Помилка видалення: ' + delErr.message, true)
-    else showMsg(`Об'єднано з наявним рядком: тепер ${total} ${unitOf(current.item_name)}`)
+    else showMsg(`Об'єднано з наявним рядком: тепер ${qtyText(current.item_name, total)}`)
     loadItems()
     return
   }
@@ -558,7 +570,7 @@ const deleteItem = async (id) => {
       // Підтвердження: видалення безповоротне, а командир отримає про нього повідомлення в Telegram
       const item = items.value.find(i => i.id === id)
       const what = item
-        ? `«${item.item_name}»\nПозиція: ${item.position_name}\nСтатус: ${item.status}\nКількість: ${item.quantity} ${unitOf(item.item_name)}`
+        ? `«${item.item_name}»\nПозиція: ${item.position_name}\nСтатус: ${item.status}\nКількість: ${qtyText(item.item_name, item.quantity)}`
         : 'цей запис'
       if (!window.confirm(`Видалити назавжди?\n\n${what}\n\nЦю дію не можна скасувати. Командир отримає повідомлення про видалення.`)) return
 
@@ -614,9 +626,9 @@ const buildReportRows = list => {
       'Марка': mergesModel(p.base) ? [p.brand, p.detail].filter(Boolean).join(' ') : p.brand,
       'Серійний номер / KIT': p.serial,
       'Статус': item.status,
-      'Кількість': Number(item.quantity),
-      'Од.': unitOf(item.item_name),
-      'Наявність': Number(item.quantity) > 0 ? '' : 'НЕМАЄ',
+      'Кількість': isPresence(item.item_name) ? '' : Number(item.quantity),
+      'Од.': isPresence(item.item_name) ? '' : unitOf(item.item_name),
+      'Наявність': isPresence(item.item_name) ? (Number(item.quantity) > 0 ? 'Є' : 'НЕМАЄ') : (Number(item.quantity) > 0 ? '' : 'НЕМАЄ'),
       'Примітки': item.notes || ''
     }))
 }
@@ -630,7 +642,7 @@ const buildSummaryRows = (list, withPosition) => {
     const label = [p.brand, p.detail].filter(Boolean).join(' ')
     const key = [withPosition ? item.position_name : '', item.category, p.base, label].join('\u0001')
     if (!groups.has(key)) {
-      groups.set(key, { pos: withPosition ? item.position_name : 'Усі позиції', cat: item.category, base: p.base, label, unit: unitOf(item.item_name), ok: 0, rep: 0, need: 0 })
+      groups.set(key, { pos: withPosition ? item.position_name : 'Усі позиції', cat: item.category, base: p.base, label, unit: unitOf(item.item_name), pres: isPresence(item.item_name), ok: 0, rep: 0, need: 0 })
     }
     const g = groups.get(key)
     const q = Number(item.quantity) || 0
@@ -647,12 +659,12 @@ const buildSummaryRows = (list, withPosition) => {
       'Категорія': g.cat,
       'Найменування': g.base,
       'Вид / марка': g.label,
-      'На позиції': g.ok,
-      'На ремонт': g.rep,
-      'Разом є': round2(g.ok + g.rep),
-      'Потреба': g.need,
-      'Од.': g.unit,
-      'Наявність': round2(g.ok + g.rep) > 0 ? '' : 'НЕМАЄ'
+      'На позиції': g.pres ? '' : g.ok,
+      'На ремонт': g.pres ? '' : g.rep,
+      'Разом є': g.pres ? '' : round2(g.ok + g.rep),
+      'Потреба': g.pres ? '' : g.need,
+      'Од.': g.pres ? '' : g.unit,
+      'Наявність': g.pres ? (round2(g.ok + g.rep) > 0 ? 'Є' : 'НЕМАЄ') : (round2(g.ok + g.rep) > 0 ? '' : 'НЕМАЄ')
     }))
 }
 // «Позиція «Чіпс»» -> «Чіпс» (для підказок і імені файлу; без символів, заборонених в іменах файлів)
@@ -808,7 +820,11 @@ const exportExcel = async () => {
                                                                                                                                                               </select>
 
                                                                                                                                                                         <div class="qty-notes-row">
-                                                                                                                                                                                    <input type="number" v-model="quantity" :disabled="currentPreset && (currentPreset.needsSerial || currentPreset.kit)" min="0" :step="currentPreset && currentPreset.unit ? '0.1' : '1'" :placeholder="currentPreset && currentPreset.unit === 'л' ? 'Літри' : (currentPreset && currentPreset.unit === 'м' ? 'Метри' : (currentPreset && currentPreset.lengthM ? 'К-ть відрізків' : 'К-ть'))" class="styled-input qty-input font-bold" />
+                                                                                                                                                                                    <select v-if="currentPreset && currentPreset.presence" v-model.number="quantity" class="styled-select qty-input presence-select">
+<option :value="1">Є</option>
+<option :value="0">Немає</option>
+</select>
+<input v-else type="number" v-model="quantity" :disabled="currentPreset && (currentPreset.needsSerial || currentPreset.kit)" min="0" :step="currentPreset && currentPreset.unit ? '0.1' : '1'" :placeholder="currentPreset && currentPreset.unit === 'л' ? 'Літри' : (currentPreset && currentPreset.unit === 'м' ? 'Метри' : (currentPreset && currentPreset.lengthM ? 'К-ть відрізків' : 'К-ть'))" class="styled-input qty-input font-bold" />
                                                                                                                                                                                                 <input v-model="notes" placeholder="Примітки / номер" class="styled-input notes-input" />
                                                                                                                                                                                                           </div>
 
@@ -845,9 +861,13 @@ const exportExcel = async () => {
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   </select>
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   </td>
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   <td class="td-qty">
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    <input type="number" min="0" :step="allowsDecimal(item.item_name) ? '0.1' : '1'" :value="item.quantity" @change="e => updateItemQty(item.id, e.target.value)" class="styled-input qty-edit font-bold" />
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    <select v-if="isPresence(item.item_name)" :value="Number(item.quantity) > 0 ? '1' : '0'" @change="e => updateItemQty(item.id, e.target.value)" class="styled-select presence-select" :class="Number(item.quantity) > 0 ? 'status-green' : 'status-red'">
+<option value="1">Є</option>
+<option value="0">Немає</option>
+</select>
+<input v-else type="number" min="0" :step="allowsDecimal(item.item_name) ? '0.1' : '1'" :value="item.quantity" @change="e => updateItemQty(item.id, e.target.value)" class="styled-input qty-edit font-bold" />
 <div v-if="allowsDecimal(item.item_name)" class="qty-unit">{{ unitOf(item.item_name) }}</div>
-<div v-if="Number(item.quantity) === 0" class="no-stock">немає</div>
+<div v-if="Number(item.quantity) === 0 && !isPresence(item.item_name)" class="no-stock">немає</div>
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     </td>
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     <td class="td-action">
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       <button @click="startEdit(item)" class="edit-btn" title="Редагувати">✎</button>
@@ -939,6 +959,7 @@ const exportExcel = async () => {
 
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     .serial-row { display: flex; gap: 6px; flex-wrap: wrap; }
 .serial-row .styled-input { flex: 1 1 140px; min-width: 0; }
+.presence-select { font-weight: 700; }
 .router-row { display: flex; align-items: center; gap: 8px; }
 .router-label { font-size: 12px; font-weight: 600; color: #475569; }
 .report-scope { margin-top: 10px; }

@@ -51,6 +51,26 @@ as $$
   end;
 $$;
 
+-- 3a2. Майно без підрахунку («Є / Немає») і текст кількості для повідомлень
+create or replace function public.tg_presence(n text)
+returns boolean
+language sql
+immutable
+as $$
+  select n in ('Лопасті', 'Світло', 'Стяжки');
+$$;
+
+create or replace function public.tg_qty(n text, q numeric)
+returns text
+language sql
+immutable
+as $$
+  select case
+    when public.tg_presence(n) then case when coalesce(q, 0) > 0 then 'є' else 'немає' end
+    else coalesce(q::text, '—') || ' ' || public.tg_unit(n)
+  end;
+$$;
+
 -- 3b. Підписники бота (заповнюється автоматично, див. telegram_subscribers.sql).
 -- RLS увімкнено без політик + права відкликано: через публічний ключ таблиця недоступна.
 create table if not exists public.telegram_chats (
@@ -96,7 +116,7 @@ begin
          '➕ <b>ДОДАНО</b> · ' || public.tg_escape(new.position_name) || E'\n'
       || '📦 <b>' || public.tg_escape(new.item_name) || '</b>' || E'\n'
       || 'Категорія: ' || public.tg_escape(new.category) || E'\n'
-      || 'Зараз: <b>' || coalesce(new.quantity::text, '—') || ' ' || public.tg_unit(new.item_name) || '</b> · '
+      || 'Зараз: <b>' || public.tg_qty(new.item_name, new.quantity) || '</b> · '
       || public.tg_status_icon(new.status) || ' ' || public.tg_escape(new.status)
       || case when coalesce(new.notes, '') <> ''
               then E'\n' || '📝 ' || public.tg_escape(new.notes) else '' end
@@ -109,7 +129,9 @@ begin
     if new.status is distinct from old.status then
       v_head := public.tg_status_icon(new.status) || ' <b>' || upper(public.tg_escape(new.status)) || '</b>';
     elsif new.quantity is distinct from old.quantity then
-      v_head := '🔢 <b>КІЛЬКІСТЬ</b>';
+      v_head := case when public.tg_presence(new.item_name)
+                     then case when coalesce(new.quantity, 0) > 0 then '✅ <b>Є</b>' else '❌ <b>НЕМАЄ</b>' end
+                     else '🔢 <b>КІЛЬКІСТЬ</b>' end;
     else
       v_head := '✏️ <b>ЗМІНЕНО</b>';
     end if;
@@ -119,8 +141,10 @@ begin
         || ' → ' || public.tg_status_icon(new.status) || ' <b>' || public.tg_escape(new.status) || '</b>' || E'\n';
     end if;
     if new.quantity is distinct from old.quantity then
-      v_changes := v_changes || 'Кількість: ' || coalesce(old.quantity::text, '—')
-        || ' → <b>' || coalesce(new.quantity::text, '—') || ' ' || public.tg_unit(new.item_name) || '</b>' || E'\n';
+      v_changes := v_changes
+        || case when public.tg_presence(new.item_name) then 'Наявність: ' else 'Кількість: ' end
+        || public.tg_qty(old.item_name, old.quantity)
+        || ' → <b>' || public.tg_qty(new.item_name, new.quantity) || '</b>' || E'\n';
     end if;
     if new.notes is distinct from old.notes then
       v_changes := v_changes || 'Примітка: ' || public.tg_escape(old.notes)
@@ -144,7 +168,7 @@ begin
       return null;
     end if;
 
-    v_now := 'Зараз: <b>' || coalesce(new.quantity::text, '—') || ' ' || public.tg_unit(new.item_name) || '</b> · '
+    v_now := 'Зараз: <b>' || public.tg_qty(new.item_name, new.quantity) || '</b> · '
       || public.tg_status_icon(new.status) || ' ' || public.tg_escape(new.status);
 
     v_text :=
@@ -160,7 +184,7 @@ begin
          '🗑 <b>ВИДАЛЕНО</b> · ' || public.tg_escape(old.position_name) || E'\n'
       || '📦 <b>' || public.tg_escape(old.item_name) || '</b>' || E'\n'
       || 'Категорія: ' || public.tg_escape(old.category) || E'\n'
-      || 'Було: ' || coalesce(old.quantity::text, '—') || ' ' || public.tg_unit(old.item_name) || ' · '
+      || 'Було: ' || public.tg_qty(old.item_name, old.quantity) || ' · '
       || public.tg_status_icon(old.status) || ' ' || public.tg_escape(old.status) || E'\n';
   end if;
 

@@ -347,7 +347,7 @@ const buildReportRows = list => {
       'Статус': item.status,
       'Кількість': Number(item.quantity),
       'Од.': unitOf(item.item_name),
-      'Наявність': Number(item.quantity) > 0 ? 'Є' : 'НЕМАЄ',
+      'Наявність': Number(item.quantity) > 0 ? '' : 'НЕМАЄ',
       'Примітки': item.notes || ''
     }))
 }

@@ -29,7 +29,6 @@ const PRESET_ITEMS = [
   { name: 'Вогнегасники', category: 'Спорядження' },
   { name: 'Пульти до дронів', category: 'БПЛА', variants: ['Для 4 Pro', 'Для Матріс', 'Для Outel', 'Для 3 серії'] },
   { name: 'Батарейки до дронів', category: 'БПЛА', variants: ['Аутель', 'Мавік 3', 'Матріс', 'Мавік 4 Pro'] },
-  { name: 'Батарейки-старки', category: 'Зв\'язок' },
   { name: 'Планшети', category: 'БПЛА', needsSerial: true },
   { name: 'Дрони', category: 'БПЛА', variantLabel: 'модель дрона', variants: ['Mavic 3 Pro', 'Mavic 3T', 'Mavic 3TA', 'Mavic 4 Pro "Панда"', 'Mavic 4 Pro "Лікар"', 'Matrice 4T', 'Outel', 'Matrice 4'] },
   { name: 'Перехідники', category: 'Інше', variants: ['Для 3 серії', 'Для 4 Pro', 'Для Outel'] },

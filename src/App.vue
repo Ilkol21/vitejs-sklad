@@ -49,7 +49,7 @@ const PRESET_ITEMS = [
   { name: 'Лопасті', category: 'БПЛА', presence: true },
   { name: 'Стяжки', category: 'Витратні матеріали', presence: true },
   { name: 'Ізолента', category: 'Витратні матеріали' },
-  { name: 'Сітка від РПВ', category: 'Спорядження' },
+  { name: 'Сітка від ФПВ', category: 'Спорядження' },
   { name: 'Спальники', category: 'Спорядження' },
   { name: 'Каримати', category: 'Спорядження' },
   { name: 'Мішки', category: 'Витратні матеріали' },

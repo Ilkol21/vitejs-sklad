@@ -57,7 +57,7 @@ returns boolean
 language sql
 immutable
 as $$
-  select n in ('Лопасті', 'Світло', 'Стяжки');
+  select n in ('Лопасті', 'Світло', 'Стяжки', 'Розпорки для дронів', 'Кріплення на спирку', 'Ремінь на кріплення', 'Посуд', 'Мультитул');
 $$;
 
 create or replace function public.tg_qty(n text, q numeric)

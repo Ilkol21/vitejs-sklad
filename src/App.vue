@@ -73,8 +73,8 @@ const POSITIONS = ['Позиція «Чіпс»', 'Позиція «Зебра»
 
 const unitName = ref(localStorage.getItem('unit_name') || '128 ОГШБр')
 const selectedPositionName = ref(POSITIONS[0])
-// Для якої позиції формувати звіт: '' = усі позиції
-const reportPosition = ref('')
+// Для якої позиції формувати звіт: за замовчуванням для поточної (її змінює перемикач вгорі); '' = усі позиції
+const reportPosition = ref(POSITIONS[0])
 
 const selectedPresetItem = ref(PRESET_ITEMS[0].name)
 const category = ref(PRESET_ITEMS[0].category)
@@ -152,7 +152,9 @@ onUnmounted(() => {
       if (realtimeChannel) supabase.removeChannel(realtimeChannel)
 })
 
-watch(selectedPositionName, () => {
+watch(selectedPositionName, (pos) => {
+      // Звіт за замовчуванням іде для відкритої позиції: на Зебрі кнопка Excel дає звіт Зебри
+      reportPosition.value = pos
       loadItems()
 })
 

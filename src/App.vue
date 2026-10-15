@@ -70,6 +70,8 @@ const POSITIONS = ['Позиція «Чіпс»', 'Позиція «Зебра»
 
 const unitName = ref(localStorage.getItem('unit_name') || '128 ОГШБр')
 const selectedPositionName = ref(POSITIONS[0])
+// Для якої позиції формувати звіт: '' = усі позиції
+const reportPosition = ref('')
 
 const selectedPresetItem = ref(PRESET_ITEMS[0].name)
 const category = ref(PRESET_ITEMS[0].category)
@@ -352,10 +354,20 @@ const buildReportRows = list => {
     }))
 }
 
+// «Позиція «Чіпс»» -> «Чіпс» (для підказок і імені файлу; без символів, заборонених в іменах файлів)
+const positionLabel = name => String(name || '').replace(/^Позиція\s+/, '').replace(/[«»"\\/:*?<>|]/g, '').trim()
+
 const exportExcel = async () => {
   try {
-    const { data: allItems, error } = await supabase.from('items').select('*')
+    let query = supabase.from('items').select('*')
+    if (reportPosition.value) query = query.eq('position_name', reportPosition.value)
+    const { data: allItems, error } = await query
     if (error) throw error
+
+    if (!allItems || !allItems.length) {
+      showMsg(reportPosition.value ? `На позиції «${positionLabel(reportPosition.value)}» немає майна для звіту` : 'Немає майна для звіту', true)
+      return
+    }
 
     // У звіт потрапляють усі рядки, зокрема з кількістю 0 (це позначка «немає»)
     const reportData = buildReportRows(allItems)
@@ -367,7 +379,8 @@ const exportExcel = async () => {
 
     const prefix = unitName.value ? `_${unitName.value.replace(/\s+/g, '')}` : ''
     const dateStr = new Date().toLocaleDateString('uk-UA').replace(/\./g, '-')
-    XLSX.writeFile(wb, `Звіт_Склад${prefix}_${dateStr}.xlsx`)
+    const posPart = reportPosition.value ? `_${positionLabel(reportPosition.value).replace(/\s+/g, '')}` : '_УсіПозиції'
+    XLSX.writeFile(wb, `Звіт_Склад${prefix}${posPart}_${dateStr}.xlsx`)
     showMsg('Excel файл успішно завантажено!')
   } catch (err) {
     console.error('EXCEL ERROR:', err)
@@ -478,7 +491,14 @@ const exportExcel = async () => {
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               <button @click="saveUnitName" class="btn btn-secondary">Зберегти назву</button>
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         </div>
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 </div>
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        <button @click="exportExcel" class="btn btn-excel">📊 СКАЧАТИ ЗВІТ В EXCEL</button>
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        <div class="report-scope">
+<label class="block text-xs font-bold text-gray-600 mb-1">Звіт для:</label>
+<select v-model="reportPosition" class="styled-select font-bold report-select">
+<option value="">Усі позиції</option>
+<option v-for="pos in POSITIONS" :key="pos" :value="pos">{{ pos }}</option>
+</select>
+</div>
+<button @click="exportExcel" class="btn btn-excel">📊 СКАЧАТИ ЗВІТ В EXCEL</button>
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               </div>
 
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   </div>
@@ -531,7 +551,9 @@ const exportExcel = async () => {
 .no-stock { font-size: 11px; font-weight: 700; color: #991b1b; background: #fef2f2; border-radius: 4px; margin-top: 2px; padding: 1px 4px; }
 .del-btn { color: #dc2626; background: #fee2e2; border: none; cursor: pointer; font-weight: bold; font-size: 13px; padding: 6px 10px; border-radius: 6px; }
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    .excel-footer-box { background: #f8fafc; border: 1px solid #e2e8f0; padding: 14px; border-radius: 8px; }
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    .report-scope { margin-top: 10px; }
+.report-select { width: 100%; }
+.excel-footer-box { background: #f8fafc; border: 1px solid #e2e8f0; padding: 14px; border-radius: 8px; }
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     .text-center { text-align: center; }
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     </style>
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     }

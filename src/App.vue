@@ -400,6 +400,13 @@ const updateItemStatus = async (id, newStatus) => {
 }
 
 const deleteItem = async (id) => {
+      // Підтвердження: видалення безповоротне, а командир отримає про нього повідомлення в Telegram
+      const item = items.value.find(i => i.id === id)
+      const what = item
+        ? `«${item.item_name}»\nПозиція: ${item.position_name}\nСтатус: ${item.status}\nКількість: ${item.quantity} ${unitOf(item.item_name)}`
+        : 'цей запис'
+      if (!window.confirm(`Видалити назавжди?\n\n${what}\n\nЦю дію не можна скасувати. Командир отримає повідомлення про видалення.`)) return
+
       const { error } = await supabase.from('items').delete().eq('id', id)
         if (error) {
                 showMsg('Помилка видалення: ' + error.message, true)

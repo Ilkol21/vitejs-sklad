@@ -1,29 +1,69 @@
 <script setup>
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import * as XLSX from 'xlsx'
 import { supabase } from './supabase.js'
 
+// Моделі дронів (вибір при додаванні пункту «Дрони»)
+const DRONE_MODELS = ['Mavic 3 Pro', 'Mavic 3T', 'Mavic 3TA', 'Mavic 4 Pro', 'Matrice 4T', 'Outel', 'Matrice 4']
+
+// Список обладнання на позиції: назва + категорія (підставляється автоматично)
 const PRESET_ITEMS = [
-      'Зарядна станція: Initial Entropy Energy',
-        'Зарядна станція: EcoFlow Rto',
-          'Зарядна станція: EcoFlow',
-            'Зарядна станція: Dabbsson',
-              'Генератор: KS 3301i',
-                'Зарядки до спарок (Toolkit)',
-                  'Бур',
-                    'Старлінк: Mini',
-                      'Камера відеоспостереження',
-                        'Антена: Евенджер',
-                          'Антена: AcaSom',
-                            'Репітор',
-                              'Кабелі',
-                                'Бахмут телеком (обладнання)',
-                                  'Пульт: Мавік 3',
-                                    'Пульт: Матріс 4',
-                                      'Дрон: День',
-                                        'Дрон: Ніч',
-                                          'Батареї (Батки)',
-                                            'Хаби для баток: Мавік'
+  { name: 'Старлінк', category: 'Зв\'язок' },
+  { name: 'Генератор', category: 'Живлення' },
+  { name: 'Зарядні станції (EcoFlow)', category: 'Живлення', needsSerial: true },
+  { name: 'Рація + павук', category: 'Зв\'язок', needsSerial: true },
+  { name: 'Камера спостереження', category: 'Зв\'язок' },
+  { name: 'Антена', category: 'Зв\'язок' },
+  { name: 'Репітор', category: 'Зв\'язок' },
+  { name: 'Зарядні хаби', category: 'Живлення' },
+  { name: 'Зарядки 55"', category: 'Живлення' },
+  { name: 'Кабелі "RGB"', category: 'Зв\'язок' },
+  { name: 'ОЗМ', category: 'Боєприпаси' },
+  { name: 'Кірка', category: 'Інструменти' },
+  { name: 'Лопати', category: 'Інструменти' },
+  { name: 'Газовий балон', category: 'Витратні матеріали' },
+  { name: 'Бур', category: 'Живлення' },
+  { name: 'Протигази', category: 'Спорядження' },
+  { name: 'Вогнегасники', category: 'Спорядження' },
+  { name: 'Пульти до дронів', category: 'БПЛА' },
+  { name: 'Батарейки до дронів', category: 'БПЛА' },
+  { name: 'Батарейки — старки', category: 'Зв\'язок' },
+  { name: 'Планшети', category: 'БПЛА', needsSerial: true },
+  { name: 'Дрони', category: 'БПЛА', models: DRONE_MODELS },
+  { name: 'Перехідники', category: 'Інше' },
+  { name: 'БК', category: 'Боєприпаси' },
+  { name: 'Скиди', category: 'БПЛА' },
+  { name: 'Рупор', category: 'Зв\'язок' },
+  { name: 'Зарядка до рації', category: 'Зв\'язок' },
+  { name: 'Маск-сітка', category: 'Спорядження' },
+  { name: 'Сокира', category: 'Інструменти' },
+  { name: 'Степлери', category: 'Інструменти' },
+  { name: 'Цвяхи', category: 'Витратні матеріали' },
+  { name: 'Переноски', category: 'Живлення' },
+  { name: 'Зіп до генератора', category: 'Живлення' },
+  { name: 'Трійники', category: 'Живлення' },
+  { name: 'Світло', category: 'Живлення' },
+  { name: 'Лопасті', category: 'БПЛА' },
+  { name: 'Стяжки', category: 'Витратні матеріали' },
+  { name: 'Ізолента', category: 'Витратні матеріали' },
+  { name: 'Сітка від РПВ', category: 'Спорядження' },
+  { name: 'Спальники', category: 'Спорядження' },
+  { name: 'Каримати', category: 'Спорядження' },
+  { name: 'Мішки', category: 'Витратні матеріали' },
+  { name: 'Грілка', category: 'Спорядження' },
+  { name: 'Пальник', category: 'Спорядження' },
+  { name: 'Мультиметр', category: 'Інструменти' },
+  { name: 'Жужик для ОЗМ', category: 'Боєприпаси' },
+  { name: 'Датчик газу', category: 'Спорядження' },
+  { name: 'Бензин', category: 'Витратні матеріали' },
+  { name: 'Масло', category: 'Витратні матеріали' },
+  { name: 'Розпорки для дронів', category: 'БПЛА' },
+  { name: 'Кріплення на спирку', category: 'Інше' },
+  { name: 'Ремінь на кріплення', category: 'Інше' },
+  { name: 'Посуд', category: 'Спорядження' },
+  { name: 'Мультитул', category: 'Інструменти' },
+  { name: 'Ніж', category: 'Інструменти' },
+  { name: 'Шестигранні ключі', category: 'Інструменти' }
 ]
 
 const POSITIONS = ['Позиція «Чіпс»', 'Позиція «Зебра»', 'Позиція «Осло»', 'Позиція «Гарпун»']
@@ -31,11 +71,15 @@ const POSITIONS = ['Позиція «Чіпс»', 'Позиція «Зебра»
 const unitName = ref(localStorage.getItem('unit_name') || '128 ОГШБр')
 const selectedPositionName = ref(POSITIONS[0])
 
-const selectedPresetItem = ref(PRESET_ITEMS[0])
-const category = ref('Живлення')
+const selectedPresetItem = ref(PRESET_ITEMS[0].name)
+const category = ref(PRESET_ITEMS[0].category)
 const status = ref('На позиції')
 const quantity = ref(1)
 const notes = ref('')
+const brand = ref('')
+const serial = ref('')
+const droneModel = ref('')
+const currentPreset = computed(() => PRESET_ITEMS.find(p => p.name === selectedPresetItem.value))
 
 const items = ref([])
 const toastMessage = ref('')
@@ -90,27 +134,52 @@ watch(selectedPositionName, () => {
 })
 
 const onPresetChange = () => {
-      const name = selectedPresetItem.value
-        if (name.includes('Зарядна') || name.includes('Генератор') || name.includes('Бур') || name.includes('Зарядки')) {
-                category.value = 'Живлення'
-        } else if (name.includes('Старлінк') || name.includes('Камера') || name.includes('Антена') || name.includes('Репітор') || name.includes('Кабелі') || name.includes('телеком')) {
-                category.value = "Зв'язок"
-        } else {
-                category.value = 'БПЛА'
-        }
+  const preset = PRESET_ITEMS.find(p => p.name === selectedPresetItem.value)
+  if (preset) category.value = preset.category
+  brand.value = ''
+  serial.value = ''
+  droneModel.value = ''
+  if (preset && preset.needsSerial) quantity.value = 1
 }
 
 // Додавання в хмару з виведенням точної помилки
 const addItem = async () => {
-      if (!selectedPresetItem.value) return
+  if (!selectedPresetItem.value) return
+
+  const preset = currentPreset.value
+  let fullName = selectedPresetItem.value
+  let qty = Number(quantity.value)
+
+  if (preset && preset.needsSerial) {
+    const b = brand.value.trim()
+    const sn = serial.value.trim()
+    if (!b) { showMsg('Вкажіть марку', true); return }
+    if (!sn) { showMsg('Вкажіть серійний номер', true); return }
+    fullName = `${preset.name} — ${b}, S/N ${sn}`
+    qty = 1
+
+    // Один серійний номер = один запис (на жодній з позицій)
+    const { data: dup, error: dupErr } = await supabase.from('items').select('position_name').eq('item_name', fullName).limit(1)
+    if (dupErr) {
+      showMsg('Помилка перевірки: ' + dupErr.message, true)
+      return
+    }
+    if (dup && dup.length) {
+      showMsg('Такий серійний номер уже є: ' + dup[0].position_name, true)
+      return
+    }
+  } else if (preset && preset.models) {
+    if (!droneModel.value) { showMsg('Оберіть модель', true); return }
+    fullName = `${preset.name} — ${droneModel.value}`
+  }
 
         const { error } = await supabase.from('items').insert([
                 {
                           position_name: selectedPositionName.value,
                                 category: category.value,
-                                      item_name: selectedPresetItem.value,
+item_name: fullName,
                                             status: status.value,
-                                                  quantity: Number(quantity.value),
+quantity: qty,
                                                         notes: notes.value
                 }
         ])
@@ -120,7 +189,8 @@ const addItem = async () => {
                     showMsg('Помилка бази: ' + error.message, true)
           } else {
                 notes.value = ''
-                    quantity.value = 1
+quantity.value = 1
+                    serial.value = ''
                         showMsg('Збережено в хмару!')
                             loadItems()
           }
@@ -200,8 +270,18 @@ const exportExcel = async () => {
                                                               <h4 class="font-bold text-gray-700">➕ Додати майно зі списку</h4>
                                                                       <div class="grid-form">
                                                                                 <select v-model="selectedPresetItem" @change="onPresetChange" class="styled-select item-select">
-                                                                                            <option v-for="preset in PRESET_ITEMS" :key="preset" :value="preset">{{ preset }}</option>
+                                                                                            <option v-for="preset in PRESET_ITEMS" :key="preset.name" :value="preset.name">{{ preset.name }}</option>
                                                                                                       </select>
+
+          <div v-if="currentPreset && currentPreset.needsSerial" class="qty-notes-row">
+            <input v-model="brand" placeholder="Марка *" class="styled-input notes-input" />
+            <input v-model="serial" placeholder="Серійний номер *" class="styled-input notes-input" />
+          </div>
+
+          <select v-if="currentPreset && currentPreset.models" v-model="droneModel" class="styled-select item-select">
+            <option value="" disabled>Оберіть модель дрона *</option>
+            <option v-for="m in currentPreset.models" :key="m" :value="m">{{ m }}</option>
+          </select>
 
                                                                                                                 <select v-model="status" class="styled-select status-select">
                                                                                                                             <option value="На позиції">🟢 На позиції</option>
@@ -210,7 +290,7 @@ const exportExcel = async () => {
                                                                                                                                                               </select>
 
                                                                                                                                                                         <div class="qty-notes-row">
-                                                                                                                                                                                    <input type="number" v-model="quantity" min="1" placeholder="К-ть" class="styled-input qty-input font-bold" />
+                                                                                                                                                                                    <input type="number" v-model="quantity" :disabled="currentPreset && currentPreset.needsSerial" min="1" placeholder="К-ть" class="styled-input qty-input font-bold" />
                                                                                                                                                                                                 <input v-model="notes" placeholder="Примітки / номер" class="styled-input notes-input" />
                                                                                                                                                                                                           </div>
 

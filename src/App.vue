@@ -4,7 +4,7 @@ import * as XLSX from 'xlsx'
 import { supabase } from './supabase.js'
 
 // Список обладнання на позиції.
-// kit: номери KIT вручну (кілька через кому, кожен = окремий запис); router: необов'язкове поле «роутер» з кількістю
+// kit: номер KIT вручну (кожен Старлінк додається окремо); router: необов'язкове поле «роутер» з кількістю
 // variants: список видів (обов'язковий вибір); freeName: вільна назва; needsSerial: серійний номер (noBrand: без марки);
 // unit: одиниця виміру ('л', 'м'; за замовчуванням шт.)
 const PRESET_ITEMS = [
@@ -178,14 +178,13 @@ const addRouter = async n => {
   return error ? error.message : null
 }
 
-// Старлінки: версія + номери KIT (кожен номер = окремий запис) + необов'язковий роутер
+// Старлінк: версія + один номер KIT (кожен Старлінк додається окремо) + необов'язковий роутер
 const addKitItems = async preset => {
   if (!variant.value) { showMsg(`Оберіть ${preset.variantLabel || 'вид'}`, true); return }
 
-  const kits = kitNumbers.value.split(/[,;\n]+/).map(k => k.trim()).filter(Boolean)
-  if (!kits.length) { showMsg('Вкажіть номер KIT', true); return }
-  const upper = kits.map(k => k.toUpperCase())
-  if (new Set(upper).size !== kits.length) { showMsg('Номери KIT повторюються', true); return }
+  const kit = kitNumbers.value.trim()
+  if (!kit) { showMsg('Вкажіть номер KIT', true); return }
+  if (/[,;\n]/.test(kit)) { showMsg('Вводьте один номер KIT: кожен Старлінк додається окремо', true); return }
 
   let routers = 0
   const rawRouter = String(routerQty.value === null || routerQty.value === undefined ? '' : routerQty.value).trim()
@@ -197,20 +196,17 @@ const addKitItems = async preset => {
   // Номер KIT унікальний на всіх позиціях і версіях
   const { data: existing, error: exErr } = await supabase.from('items').select('item_name, position_name').like('item_name', `${preset.name} — %`)
   if (exErr) { showMsg('Помилка перевірки: ' + exErr.message, true); return }
-  for (const row of existing || []) {
-    const kit = parseItemName(row.item_name).serial.toUpperCase()
-    const i = kit ? upper.indexOf(kit) : -1
-    if (i >= 0) { showMsg(`Такий KIT уже є: ${kits[i]} (${row.position_name})`, true); return }
-  }
+  const taken = (existing || []).find(row => parseItemName(row.item_name).serial.toUpperCase() === kit.toUpperCase())
+  if (taken) { showMsg(`Такий KIT уже є: ${kit} (${taken.position_name})`, true); return }
 
-  const { error } = await supabase.from('items').insert(kits.map(k => ({
+  const { error } = await supabase.from('items').insert([{
     position_name: selectedPositionName.value,
     category: category.value,
-    item_name: `${preset.name} — ${variant.value}, KIT ${k}`,
+    item_name: `${preset.name} — ${variant.value}, KIT ${kit}`,
     status: status.value,
     quantity: 1,
     notes: notes.value
-  })))
+  }])
   if (error) {
     console.error('SUPABASE ERROR:', error)
     showMsg(error.code === '23505' ? 'Такий запис уже є, оновіть сторінку' : 'Помилка бази: ' + error.message, true)
@@ -218,14 +214,16 @@ const addKitItems = async preset => {
   }
 
   let routerMsg = ''
+  let routerFailed = false
   if (routers > 0) {
     const routerErr = await addRouter(routers)
-    routerMsg = routerErr ? `. Роутер не додано: ${routerErr}` : ` і роутерів: ${routers}`
+    if (routerErr) { routerFailed = true; routerMsg = `. Роутер не додано: ${routerErr}` }
+    else routerMsg = ` і роутерів: ${routers}`
   }
   notes.value = ''
   kitNumbers.value = ''
   routerQty.value = ''
-  showMsg(`Додано «${preset.name}»: ${kits.length} шт.${routerMsg}`, !!routerMsg && routerMsg.startsWith('.'))
+  showMsg(`Додано «${preset.name} — ${variant.value}», KIT ${kit}${routerMsg}`, routerFailed)
   loadItems()
 }
 
@@ -248,17 +246,19 @@ const addItem = async () => {
     const sn = serial.value.trim()
     if (!preset.noBrand && !b) { showMsg('Вкажіть марку', true); return }
     if (!sn) { showMsg('Вкажіть серійний номер', true); return }
+    if (/[,;\n]/.test(b + sn)) { showMsg('Вводьте один серійний номер без ком: кожна одиниця додається окремо', true); return }
     fullName = preset.noBrand ? `${preset.name} — S/N ${sn}` : `${preset.name} — ${b}, S/N ${sn}`
     qty = 1
 
     // Один серійний номер = один запис (на жодній з позицій)
-    const { data: dup, error: dupErr } = await supabase.from('items').select('position_name').eq('item_name', fullName).limit(1)
+    const { data: dup, error: dupErr } = await supabase.from('items').select('item_name, position_name').like('item_name', `${preset.name} — %`)
     if (dupErr) {
       showMsg('Помилка перевірки: ' + dupErr.message, true)
       return
     }
-    if (dup && dup.length) {
-      showMsg('Такий серійний номер уже є: ' + dup[0].position_name, true)
+    const dupRow = (dup || []).find(r => r.item_name.toLowerCase() === fullName.toLowerCase())
+    if (dupRow) {
+      showMsg('Такий серійний номер уже є: ' + dupRow.position_name, true)
       return
     }
   } else if (preset && preset.variants) {
@@ -434,6 +434,40 @@ const buildReportRows = list => {
     }))
 }
 
+// Підсумок: однакове майно рахується разом (KIT і серійні номери не розділяють групу).
+// «Разом є» = На позиції + На ремонт (це майно, яке є); «Потреба» окремо, бо це не наявність.
+const buildSummaryRows = (list, withPosition) => {
+  const groups = new Map()
+  for (const item of list || []) {
+    const p = parseItemName(item.item_name)
+    const label = p.detail || p.brand
+    const key = [withPosition ? item.position_name : '', item.category, p.base, label].join('\u0001')
+    if (!groups.has(key)) {
+      groups.set(key, { pos: withPosition ? item.position_name : 'Усі позиції', cat: item.category, base: p.base, label, unit: unitOf(item.item_name), ok: 0, rep: 0, need: 0 })
+    }
+    const g = groups.get(key)
+    const q = Number(item.quantity) || 0
+    if (item.status === 'На позиції') g.ok = round2(g.ok + q)
+    else if (item.status === 'На ремонт') g.rep = round2(g.rep + q)
+    else if (item.status === 'Потреба') g.need = round2(g.need + q)
+  }
+  const posIndex = name => { const i = POSITIONS.indexOf(name); return i < 0 ? 999 : i }
+  const cmp = (a, b) => String(a).localeCompare(String(b), 'uk')
+  return [...groups.values()]
+    .sort((a, b) => posIndex(a.pos) - posIndex(b.pos) || cmp(a.cat, b.cat) || cmp(a.base, b.base) || cmp(a.label, b.label))
+    .map(g => ({
+      'Позиція': g.pos,
+      'Категорія': g.cat,
+      'Найменування': g.base,
+      'Вид / марка': g.label,
+      'На позиції': g.ok,
+      'На ремонт': g.rep,
+      'Разом є': round2(g.ok + g.rep),
+      'Потреба': g.need,
+      'Од.': g.unit,
+      'Наявність': round2(g.ok + g.rep) > 0 ? '' : 'НЕМАЄ'
+    }))
+}
 // «Позиція «Чіпс»» -> «Чіпс» (для підказок і імені файлу; без символів, заборонених в іменах файлів)
 const positionLabel = name => String(name || '').replace(/^Позиція\s+/, '').replace(/[«»"\\/:*?<>|]/g, '').trim()
 
@@ -456,6 +490,16 @@ const exportExcel = async () => {
     const ws = XLSX.utils.json_to_sheet(reportData)
     ws['!cols'] = [18, 14, 28, 26, 16, 18, 12, 10, 6, 11, 28].map(wch => ({ wch }))
     XLSX.utils.book_append_sheet(wb, ws, 'Облік майна')
+
+    // Підсумок: однакове майно разом (по позиціях), а для кількох позицій ще й загальний
+    const wsSum = XLSX.utils.json_to_sheet(buildSummaryRows(allItems, true))
+    wsSum['!cols'] = [18, 14, 28, 26, 11, 11, 10, 10, 6, 11].map(wch => ({ wch }))
+    XLSX.utils.book_append_sheet(wb, wsSum, 'Підсумок')
+    if (new Set(allItems.map(i => i.position_name)).size > 1) {
+      const wsAll = XLSX.utils.json_to_sheet(buildSummaryRows(allItems, false))
+      wsAll['!cols'] = [14, 14, 28, 26, 11, 11, 10, 10, 6, 11].map(wch => ({ wch }))
+      XLSX.utils.book_append_sheet(wb, wsAll, 'Разом')
+    }
 
     const prefix = unitName.value ? `_${unitName.value.replace(/\s+/g, '')}` : ''
     const dateStr = new Date().toLocaleDateString('uk-UA').replace(/\./g, '-')
@@ -503,7 +547,7 @@ const exportExcel = async () => {
 
           <input v-if="currentPreset && currentPreset.freeName" v-model="customName" placeholder="Назва *" class="styled-input" />
 
-<input v-if="currentPreset && currentPreset.kit" v-model="kitNumbers" placeholder="Номер KIT * (кілька через кому)" class="styled-input" />
+<input v-if="currentPreset && currentPreset.kit" v-model="kitNumbers" placeholder="Номер KIT *" class="styled-input" />
 
 <div v-if="currentPreset && currentPreset.router" class="router-row">
 <label class="router-label">Роутер (необов'язково):</label>

@@ -39,6 +39,19 @@ as $$
   end;
 $$;
 
+-- 3a. Одиниця виміру за назвою майна
+create or replace function public.tg_unit(n text)
+returns text
+language sql
+immutable
+as $$
+  select case
+    when n in ('Бензин', 'Масло') then 'л'
+    when n = 'Кабель RG8' then 'м'
+    else 'шт.'
+  end;
+$$;
+
 -- 3b. Підписники бота (заповнюється автоматично, див. telegram_subscribers.sql).
 -- RLS увімкнено без політик + права відкликано: через публічний ключ таблиця недоступна.
 create table if not exists public.telegram_chats (
@@ -84,11 +97,13 @@ begin
          '➕ <b>ДОДАНО</b> · ' || public.tg_escape(new.position_name) || E'\n'
       || '📦 <b>' || public.tg_escape(new.item_name) || '</b>' || E'\n'
       || 'Категорія: ' || public.tg_escape(new.category) || E'\n'
-      || 'Зараз: <b>' || coalesce(new.quantity::text, '—') || ' шт.</b> · '
+      || 'Зараз: <b>' || coalesce(new.quantity::text, '—') || ' ' || public.tg_unit(new.item_name) || '</b> · '
       || public.tg_status_icon(new.status) || ' ' || public.tg_escape(new.status)
       || case when coalesce(new.notes, '') <> ''
               then E'\n' || '📝 ' || public.tg_escape(new.notes) else '' end
-      || E'\n';
+      || E'\n'
+      || case when coalesce(new.quantity, 0) = 0
+              then '⚠️ <b>Немає в наявності</b>' || E'\n' else '' end;
 
   elsif tg_op = 'UPDATE' then
     -- Заголовок залежить від головної зміни: статус > кількість > інше
@@ -106,7 +121,7 @@ begin
     end if;
     if new.quantity is distinct from old.quantity then
       v_changes := v_changes || 'Кількість: ' || coalesce(old.quantity::text, '—')
-        || ' → <b>' || coalesce(new.quantity::text, '—') || '</b>' || E'\n';
+        || ' → <b>' || coalesce(new.quantity::text, '—') || ' ' || public.tg_unit(new.item_name) || '</b>' || E'\n';
     end if;
     if new.notes is distinct from old.notes then
       v_changes := v_changes || 'Примітка: ' || public.tg_escape(old.notes)
@@ -130,7 +145,7 @@ begin
       return null;
     end if;
 
-    v_now := 'Зараз: <b>' || coalesce(new.quantity::text, '—') || ' шт.</b> · '
+    v_now := 'Зараз: <b>' || coalesce(new.quantity::text, '—') || ' ' || public.tg_unit(new.item_name) || '</b> · '
       || public.tg_status_icon(new.status) || ' ' || public.tg_escape(new.status);
 
     v_text :=
@@ -146,7 +161,7 @@ begin
          '🗑 <b>ВИДАЛЕНО</b> · ' || public.tg_escape(old.position_name) || E'\n'
       || '📦 <b>' || public.tg_escape(old.item_name) || '</b>' || E'\n'
       || 'Категорія: ' || public.tg_escape(old.category) || E'\n'
-      || 'Було: ' || coalesce(old.quantity::text, '—') || ' шт. · '
+      || 'Було: ' || coalesce(old.quantity::text, '—') || ' ' || public.tg_unit(old.item_name) || ' · '
       || public.tg_status_icon(old.status) || ' ' || public.tg_escape(old.status) || E'\n';
   end if;
 

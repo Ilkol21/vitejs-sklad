@@ -428,6 +428,125 @@ const updateItemStatus = async (id, newStatus) => {
   }
 }
 
+// Редагування запису: марка, серійний номер / KIT, вид, довжина відрізка, назва, примітки
+// (кількість і статус міняються прямо в таблиці)
+const editingId = ref(null)
+const editForm = ref({ fullName: '', brand: '', serial: '', variant: '', name: '', length: '', notes: '' })
+const editingItem = computed(() => items.value.find(i => i.id === editingId.value) || null)
+const editPreset = computed(() => (editingItem.value ? presetOf(editingItem.value.item_name) : null))
+
+const startEdit = item => {
+  const p = itemParts(item)
+  const preset = presetOf(item.item_name)
+  editForm.value = {
+    fullName: item.item_name,
+    brand: p.brand,
+    serial: p.serial,
+    variant: p.detail,
+    name: p.detail,
+    length: preset && preset.lengthM ? String(parseFloat(p.detail) || '') : '',
+    notes: item.notes || ''
+  }
+  editingId.value = item.id
+}
+const cancelEdit = () => { editingId.value = null }
+
+const saveEdit = async () => {
+  const item = editingItem.value
+  if (!item) return
+  const preset = editPreset.value
+  const f = editForm.value
+  const hasComma = s => /[,;\n]/.test(s)
+  let newName = item.item_name
+  let cols = {}
+
+  if (preset && preset.kit) {
+    const v = f.variant.trim()
+    const kit = f.serial.trim()
+    if (!v) { showMsg(`Оберіть ${preset.variantLabel || 'вид'}`, true); return }
+    if (!kit) { showMsg('Вкажіть номер KIT', true); return }
+    if (hasComma(kit)) { showMsg('Вводьте один номер KIT', true); return }
+    newName = `${preset.name} — ${v}, KIT ${kit}`
+    cols = { variant: v, brand: null, serial: kit }
+  } else if (preset && preset.needsSerial) {
+    const b = preset.noBrand ? '' : f.brand.trim()
+    const sn = f.serial.trim()
+    if (!preset.noBrand && !b) { showMsg('Вкажіть марку', true); return }
+    if (!sn) { showMsg('Вкажіть серійний номер', true); return }
+    if (hasComma(b + sn)) { showMsg('Вводьте один серійний номер без ком', true); return }
+    newName = preset.noBrand ? `${preset.name} — S/N ${sn}` : `${preset.name} — ${b}, S/N ${sn}`
+    cols = { variant: null, brand: b || null, serial: sn }
+  } else if (preset && preset.variants) {
+    const v = f.variant.trim()
+    if (!v) { showMsg(`Оберіть ${preset.variantLabel || 'вид'}`, true); return }
+    newName = `${preset.name} — ${v}`
+    cols = { variant: v }
+  } else if (preset && preset.freeName) {
+    const n = f.name.trim()
+    if (!n) { showMsg('Вкажіть назву', true); return }
+    newName = `${preset.name} — ${n}`
+    cols = { variant: n }
+  } else if (preset && preset.lengthM) {
+    const len = round2(String(f.length).trim() === '' ? NaN : f.length)
+    if (!Number.isFinite(len) || len <= 0 || len > 10000) { showMsg('Вкажіть довжину відрізка в метрах (більше 0)', true); return }
+    newName = `${preset.name} — ${len} м`
+    cols = { variant: `${len} м` }
+  } else if (!preset) {
+    // Старий запис, якого немає в поточному списку: дозволяємо виправити назву повністю
+    const n = f.fullName.trim()
+    if (!n) { showMsg('Вкажіть назву', true); return }
+    newName = n
+  }
+
+  // Серійний номер / KIT унікальний на всіх позиціях
+  if (preset && (preset.kit || preset.needsSerial)) {
+    const { data: others, error: exErr } = await supabase.from('items')
+      .select('id, item_name, position_name, variant, brand, serial').like('item_name', `${preset.name} — %`)
+    if (exErr) { showMsg('Помилка перевірки: ' + exErr.message, true); return }
+    const sn = cols.serial.toLowerCase()
+    const br = (cols.brand || '').toLowerCase()
+    const clash = (others || []).find(r => {
+      if (r.id === item.id) return false
+      const p = itemParts(r)
+      return p.serial.toLowerCase() === sn && (preset.kit || p.brand.toLowerCase() === br)
+    })
+    if (clash) { showMsg(`Такий ${preset.kit ? 'KIT' : 'серійний номер'} уже є: ${clash.position_name}`, true); return }
+  }
+
+  // Нова назва збіглася з наявним рядком (та сама позиція й статус): кількості зливаємо
+  if (newName !== item.item_name && !(preset && (preset.kit || preset.needsSerial))) {
+    const { data: same, error: sameErr } = await supabase.from('items').select('id, quantity, notes')
+      .eq('position_name', item.position_name).eq('item_name', newName)
+      .eq('status', item.status).neq('id', item.id).limit(1)
+    if (sameErr) { showMsg('Помилка перевірки: ' + sameErr.message, true); return }
+    if (same && same.length) {
+      const target = same[0]
+      const total = round2(Number(target.quantity) + Number(item.quantity))
+      if (!window.confirm(`Запис «${newName}» уже є (${target.quantity} ${unitOf(newName)}).\nОб'єднати: буде ${total} ${unitOf(newName)}, а цей рядок зникне?`)) return
+      const extra = f.notes.trim()
+      const mergedNotes = !extra ? (target.notes || '') : (target.notes ? (target.notes.includes(extra) ? target.notes : target.notes + '; ' + extra) : extra)
+      const { error: mergeErr } = await supabase.from('items').update({ quantity: total, notes: mergedNotes }).eq('id', target.id)
+      if (mergeErr) { showMsg('Помилка об\'єднання: ' + mergeErr.message, true); return }
+      const { error: delErr } = await supabase.from('items').delete().eq('id', item.id)
+      if (delErr) { showMsg('Помилка видалення: ' + delErr.message, true); return }
+      cancelEdit()
+      showMsg(`Об'єднано з наявним рядком: тепер ${total} ${unitOf(newName)}`)
+      loadItems()
+      return
+    }
+  }
+
+  const { error } = await supabase.from('items').update({ item_name: newName, notes: f.notes.trim(), ...cols }).eq('id', item.id)
+  if (error) {
+    console.error('SUPABASE ERROR:', error)
+    showMsg(insertErrorText(error), true)
+    return
+  }
+  cancelEdit()
+  showMsg('Зміни збережено')
+  loadItems()
+}
+
 const deleteItem = async (id) => {
       // Підтвердження: видалення безповоротне, а командир отримає про нього повідомлення в Telegram
       const item = items.value.find(i => i.id === id)
@@ -576,6 +695,61 @@ const exportExcel = async () => {
   <div class="app-container">
       <div v-if="toastMessage" class="toast">{{ toastMessage }}</div>
 
+      <div v-if="editingItem" class="modal-backdrop" @click.self="cancelEdit">
+      <form class="modal-box" @submit.prevent="saveEdit">
+      <h4>✎ Редагувати запис</h4>
+      <div class="modal-sub">{{ editingItem.position_name }} · {{ editingItem.item_name }}</div>
+
+      <template v-if="editPreset && editPreset.kit">
+      <label class="modal-label">{{ editPreset.variantLabel ? editPreset.variantLabel.charAt(0).toUpperCase() + editPreset.variantLabel.slice(1) : 'Вид' }} *</label>
+      <select v-model="editForm.variant" class="styled-select">
+      <option v-if="editForm.variant && !editPreset.variants.includes(editForm.variant)" :value="editForm.variant">{{ editForm.variant }} (немає в списку)</option>
+      <option v-for="m in editPreset.variants" :key="m" :value="m">{{ m }}</option>
+      </select>
+      <label class="modal-label">Номер KIT *</label>
+      <input v-model="editForm.serial" class="styled-input" />
+      </template>
+
+      <template v-else-if="editPreset && editPreset.needsSerial">
+      <label v-if="!editPreset.noBrand" class="modal-label">Марка *</label>
+      <input v-if="!editPreset.noBrand" v-model="editForm.brand" class="styled-input" />
+      <label class="modal-label">Серійний номер *</label>
+      <input v-model="editForm.serial" class="styled-input" />
+      </template>
+
+      <template v-else-if="editPreset && editPreset.variants">
+      <label class="modal-label">{{ editPreset.variantLabel ? editPreset.variantLabel.charAt(0).toUpperCase() + editPreset.variantLabel.slice(1) : 'Вид' }} *</label>
+      <select v-model="editForm.variant" class="styled-select">
+      <option v-if="editForm.variant && !editPreset.variants.includes(editForm.variant)" :value="editForm.variant">{{ editForm.variant }} (немає в списку)</option>
+      <option v-for="m in editPreset.variants" :key="m" :value="m">{{ m }}</option>
+      </select>
+      </template>
+
+      <template v-else-if="editPreset && editPreset.freeName">
+      <label class="modal-label">Назва *</label>
+      <input v-model="editForm.name" class="styled-input" />
+      </template>
+
+      <template v-else-if="editPreset && editPreset.lengthM">
+      <label class="modal-label">Довжина одного відрізка, м *</label>
+      <input v-model="editForm.length" type="number" min="0.1" step="0.1" class="styled-input" />
+      </template>
+
+      <template v-else-if="!editPreset">
+      <label class="modal-label">Назва *</label>
+      <input v-model="editForm.fullName" class="styled-input" />
+      </template>
+
+      <label class="modal-label">Примітки</label>
+      <input v-model="editForm.notes" class="styled-input" />
+
+      <div class="modal-actions">
+      <button type="button" class="btn btn-secondary" @click="cancelEdit">Скасувати</button>
+      <button type="submit" class="btn btn-success modal-save">Зберегти</button>
+      </div>
+      </form>
+      </div>
+
           <h2>📦 Облік майна БПЛА (Онлайн / Реалтайм)</h2>
 
               <div class="pos-management">
@@ -663,7 +837,8 @@ const exportExcel = async () => {
 <div v-if="Number(item.quantity) === 0" class="no-stock">немає</div>
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     </td>
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     <td class="td-action">
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      <button @click="deleteItem(item.id)" class="del-btn">✕</button>
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      <button @click="startEdit(item)" class="edit-btn" title="Редагувати">✎</button>
+<button @click="deleteItem(item.id)" class="del-btn">✕</button>
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       </td>
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     </tr>
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   <tr v-if="items.length === 0">
@@ -728,7 +903,7 @@ const exportExcel = async () => {
 
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     .th-status, .td-status { width: 160px; }
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     .th-qty, .td-qty { width: 75px; text-align: center; }
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    .th-action, .td-action { width: 50px; text-align: center; }
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    .th-action, .td-action { width: 90px; text-align: center; white-space: nowrap; }
 
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     .status-cell-select { font-size: 12px; font-weight: bold; padding: 6px; border-radius: 6px; width: 100%; }
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     .status-green { background: #f0fdf4; color: #166534; border-color: #bbf7d0; }
@@ -740,6 +915,13 @@ const exportExcel = async () => {
 
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     .qty-unit { font-size: 11px; color: #64748b; margin-top: 2px; }
 .no-stock { font-size: 11px; font-weight: 700; color: #991b1b; background: #fef2f2; border-radius: 4px; margin-top: 2px; padding: 1px 4px; }
+.edit-btn { color: #1d4ed8; background: #dbeafe; border: none; cursor: pointer; font-weight: bold; font-size: 14px; padding: 6px 10px; border-radius: 6px; margin-right: 4px; }
+.modal-backdrop { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.55); display: flex; align-items: center; justify-content: center; z-index: 2000; padding: 12px; }
+.modal-box { background: #fff; border-radius: 10px; padding: 16px; width: 100%; max-width: 420px; display: flex; flex-direction: column; gap: 6px; max-height: 92vh; overflow-y: auto; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
+.modal-sub { font-size: 12px; color: #64748b; margin-bottom: 4px; word-break: break-word; }
+.modal-label { font-size: 12px; font-weight: 700; color: #475569; margin-top: 4px; }
+.modal-actions { display: flex; gap: 8px; margin-top: 10px; }
+.modal-save { flex: 1; width: auto; padding: 10px 14px; font-size: 14px; }
 .del-btn { color: #dc2626; background: #fee2e2; border: none; cursor: pointer; font-weight: bold; font-size: 13px; padding: 6px 10px; border-radius: 6px; }
 
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     .router-row { display: flex; align-items: center; gap: 8px; }

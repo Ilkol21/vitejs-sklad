@@ -7,7 +7,7 @@ import { supabase } from './supabase.js'
 // kit: номер KIT вручну (кожен Старлінк додається окремо);
 // extra: необов'язкова додаткова позиція з кількістю (роутер до Старлінка, павук до рації), зберігається окремим записом
 // variants: список видів (обов'язковий вибір); freeName: вільна назва; needsSerial: серійний номер (noBrand: без марки);
-// unit: одиниця виміру ('л', 'м'; за замовчуванням шт.)
+// unit: одиниця виміру ('л'; за замовчуванням шт.); lengthM: довжина одного відрізка в метрах + кількість відрізків
 const PRESET_ITEMS = [
   { name: 'Старлінк', category: 'Зв\'язок', kit: true, extra: { name: 'Роутер Старлінк', label: 'Роутер', plural: 'роутерів' }, variantLabel: 'версію', variants: ['Міні', '2 версія', '3 версія'] },
   { name: 'Генератор', category: 'Живлення' },
@@ -19,7 +19,7 @@ const PRESET_ITEMS = [
   { name: 'Зарядні хаби', category: 'Живлення', variants: ['Для Матріс', 'Для 4 Pro', 'Для 3 серії'] },
   { name: 'Спарки', category: 'Живлення', variants: ['Tulip', 'Для Аутель', 'До Матріс 5S', 'Звичайна 5S', 'Справа 4S'] },
   { name: 'Зарядка "5S"', category: 'Живлення' },
-  { name: 'Кабель RG8', category: 'Зв\'язок', unit: 'м' },
+  { name: 'Кабель RG8', category: 'Зв\'язок', lengthM: true },
   { name: 'ОЗМ', category: 'Боєприпаси' },
   { name: 'Кірка', category: 'Інструменти' },
   { name: 'Лопати', category: 'Інструменти' },
@@ -85,6 +85,7 @@ const serial = ref('')
 const variant = ref('')
 const customName = ref('')
 const kitNumbers = ref('')
+const lengthM = ref('')
 const extraQty = ref('')
 const currentPreset = computed(() => PRESET_ITEMS.find(p => p.name === selectedPresetItem.value))
 // Пункт за повною назвою запису: «Дрони — Mavic 3T» -> пресет «Дрони»
@@ -157,6 +158,7 @@ const onPresetChange = () => {
   serial.value = ''
   variant.value = ''
   customName.value = ''
+  lengthM.value = ''
   kitNumbers.value = ''
   extraQty.value = ''
   if (preset && (preset.needsSerial || preset.kit)) quantity.value = 1
@@ -296,6 +298,11 @@ const addItem = async () => {
     if (!n) { showMsg('Вкажіть назву', true); return }
     fullName = `${preset.name} — ${n}`
     cols = { variant: n }
+  } else if (preset && preset.lengthM) {
+    const len = round2(String(lengthM.value).trim() === '' ? NaN : lengthM.value)
+    if (!Number.isFinite(len) || len <= 0 || len > 10000) { showMsg('Вкажіть довжину відрізка в метрах (більше 0)', true); return }
+    fullName = `${preset.name} — ${len} м`
+    cols = { variant: `${len} м` }
   }
 
   if (!Number.isFinite(qty) || qty < 0) {
@@ -358,6 +365,7 @@ const addItem = async () => {
     quantity.value = 1
     serial.value = ''
     customName.value = ''
+    lengthM.value = ''
     extraQty.value = ''
     let extraMsg = ''
     let extraFailed = false
@@ -463,7 +471,7 @@ const itemParts = item => {
 // Рядки звіту: окремі колонки для виду, марки, серійного номера, кількості й одиниці виміру
 const buildReportRows = list => {
   const posIndex = name => { const i = POSITIONS.indexOf(name); return i < 0 ? 999 : i }
-  const cmp = (a, b) => String(a).localeCompare(String(b), 'uk')
+  const cmp = (a, b) => String(a).localeCompare(String(b), 'uk', { numeric: true })
   return (list || [])
     .map(item => ({ item, p: itemParts(item) }))
     .sort((a, b) =>
@@ -503,7 +511,7 @@ const buildSummaryRows = (list, withPosition) => {
     else if (item.status === 'Потреба') g.need = round2(g.need + q)
   }
   const posIndex = name => { const i = POSITIONS.indexOf(name); return i < 0 ? 999 : i }
-  const cmp = (a, b) => String(a).localeCompare(String(b), 'uk')
+  const cmp = (a, b) => String(a).localeCompare(String(b), 'uk', { numeric: true })
   return [...groups.values()]
     .sort((a, b) => posIndex(a.pos) - posIndex(b.pos) || cmp(a.cat, b.cat) || cmp(a.base, b.base) || cmp(a.label, b.label))
     .map(g => ({
@@ -598,6 +606,8 @@ const exportExcel = async () => {
 
           <input v-if="currentPreset && currentPreset.freeName" v-model="customName" placeholder="Назва *" class="styled-input" />
 
+<input v-if="currentPreset && currentPreset.lengthM" v-model="lengthM" type="number" min="0.1" step="0.1" placeholder="Довжина одного відрізка, м *" class="styled-input" />
+
 <input v-if="currentPreset && currentPreset.kit" v-model="kitNumbers" placeholder="Номер KIT *" class="styled-input" />
 
 <div v-if="currentPreset && currentPreset.extra" class="router-row">
@@ -612,7 +622,7 @@ const exportExcel = async () => {
                                                                                                                                                               </select>
 
                                                                                                                                                                         <div class="qty-notes-row">
-                                                                                                                                                                                    <input type="number" v-model="quantity" :disabled="currentPreset && (currentPreset.needsSerial || currentPreset.kit)" min="0" :step="currentPreset && currentPreset.unit ? '0.1' : '1'" :placeholder="currentPreset && currentPreset.unit === 'л' ? 'Літри' : (currentPreset && currentPreset.unit === 'м' ? 'Метри' : 'К-ть')" class="styled-input qty-input font-bold" />
+                                                                                                                                                                                    <input type="number" v-model="quantity" :disabled="currentPreset && (currentPreset.needsSerial || currentPreset.kit)" min="0" :step="currentPreset && currentPreset.unit ? '0.1' : '1'" :placeholder="currentPreset && currentPreset.unit === 'л' ? 'Літри' : (currentPreset && currentPreset.unit === 'м' ? 'Метри' : (currentPreset && currentPreset.lengthM ? 'К-ть відрізків' : 'К-ть'))" class="styled-input qty-input font-bold" />
                                                                                                                                                                                                 <input v-model="notes" placeholder="Примітки / номер" class="styled-input notes-input" />
                                                                                                                                                                                                           </div>
 

@@ -47,7 +47,6 @@ immutable
 as $$
   select case
     when n in ('Бензин', 'Масло') then 'л'
-    when n = 'Кабель RG8' then 'м'
     else 'шт.'
   end;
 $$;

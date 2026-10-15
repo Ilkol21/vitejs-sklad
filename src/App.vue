@@ -163,6 +163,14 @@ const onPresetChange = () => {
 }
 
 // Роутер до Старлінка: окремий запис з власною кількістю (додається до наявного, якщо такий уже є)
+// Повідомлення про помилку вставки (унікальний серійний номер / KIT або дублікат запису)
+const insertErrorText = error => {
+  if (error.code === '23505') {
+    return String(error.message).includes('serial') ? 'Такий серійний номер / KIT уже є' : 'Такий запис уже є, оновіть сторінку'
+  }
+  return 'Помилка бази: ' + error.message
+}
+
 const addRouter = async n => {
   const pos = selectedPositionName.value
   const { data: same, error: findErr } = await supabase.from('items').select('id, quantity')
@@ -194,22 +202,24 @@ const addKitItems = async preset => {
   }
 
   // Номер KIT унікальний на всіх позиціях і версіях
-  const { data: existing, error: exErr } = await supabase.from('items').select('item_name, position_name').like('item_name', `${preset.name} — %`)
+  const { data: existing, error: exErr } = await supabase.from('items').select('item_name, position_name, variant, brand, serial').like('item_name', `${preset.name} — %`)
   if (exErr) { showMsg('Помилка перевірки: ' + exErr.message, true); return }
-  const taken = (existing || []).find(row => parseItemName(row.item_name).serial.toUpperCase() === kit.toUpperCase())
+  const taken = (existing || []).find(row => itemParts(row).serial.toUpperCase() === kit.toUpperCase())
   if (taken) { showMsg(`Такий KIT уже є: ${kit} (${taken.position_name})`, true); return }
 
   const { error } = await supabase.from('items').insert([{
     position_name: selectedPositionName.value,
     category: category.value,
     item_name: `${preset.name} — ${variant.value}, KIT ${kit}`,
+    variant: variant.value,
+    serial: kit,
     status: status.value,
     quantity: 1,
     notes: notes.value
   }])
   if (error) {
     console.error('SUPABASE ERROR:', error)
-    showMsg(error.code === '23505' ? 'Такий запис уже є, оновіть сторінку' : 'Помилка бази: ' + error.message, true)
+    showMsg(insertErrorText(error), true)
     return
   }
 
@@ -235,6 +245,7 @@ const addItem = async () => {
   const preset = currentPreset.value
   let fullName = selectedPresetItem.value
   let qty = round2(quantity.value === '' || quantity.value === null ? NaN : quantity.value)
+  let cols = {}
 
   if (preset && preset.kit) {
     await addKitItems(preset)
@@ -242,21 +253,22 @@ const addItem = async () => {
   }
 
   if (preset && preset.needsSerial) {
-    const b = brand.value.trim()
+    const b = preset.noBrand ? '' : brand.value.trim()
     const sn = serial.value.trim()
     if (!preset.noBrand && !b) { showMsg('Вкажіть марку', true); return }
     if (!sn) { showMsg('Вкажіть серійний номер', true); return }
     if (/[,;\n]/.test(b + sn)) { showMsg('Вводьте один серійний номер без ком: кожна одиниця додається окремо', true); return }
     fullName = preset.noBrand ? `${preset.name} — S/N ${sn}` : `${preset.name} — ${b}, S/N ${sn}`
     qty = 1
+    cols = { brand: b || null, serial: sn }
 
     // Один серійний номер = один запис (на жодній з позицій)
-    const { data: dup, error: dupErr } = await supabase.from('items').select('item_name, position_name').like('item_name', `${preset.name} — %`)
+    const { data: dup, error: dupErr } = await supabase.from('items').select('item_name, position_name, variant, brand, serial').like('item_name', `${preset.name} — %`)
     if (dupErr) {
       showMsg('Помилка перевірки: ' + dupErr.message, true)
       return
     }
-    const dupRow = (dup || []).find(r => r.item_name.toLowerCase() === fullName.toLowerCase())
+    const dupRow = (dup || []).find(r => { const p = itemParts(r); return p.brand.toLowerCase() === b.toLowerCase() && p.serial.toLowerCase() === sn.toLowerCase() })
     if (dupRow) {
       showMsg('Такий серійний номер уже є: ' + dupRow.position_name, true)
       return
@@ -264,10 +276,12 @@ const addItem = async () => {
   } else if (preset && preset.variants) {
     if (!variant.value) { showMsg(`Оберіть ${preset.variantLabel || 'вид'}`, true); return }
     fullName = `${preset.name} — ${variant.value}`
+    cols = { variant: variant.value }
   } else if (preset && preset.freeName) {
     const n = customName.value.trim()
     if (!n) { showMsg('Вкажіть назву', true); return }
     fullName = `${preset.name} — ${n}`
+    cols = { variant: n }
   }
 
   if (!Number.isFinite(qty) || qty < 0) {
@@ -317,13 +331,14 @@ const addItem = async () => {
       item_name: fullName,
       status: status.value,
       quantity: qty,
-      notes: notes.value
+      notes: notes.value,
+      ...cols
     }
   ])
 
   if (error) {
     console.error('SUPABASE ERROR:', error)
-    showMsg(error.code === '23505' ? 'Такий запис уже є, оновіть сторінку' : 'Помилка бази: ' + error.message, true)
+    showMsg(insertErrorText(error), true)
   } else {
     notes.value = ''
     quantity.value = 1
@@ -409,12 +424,19 @@ const parseItemName = full => {
   return { base, detail: rest, brand: '', serial: '' }
 }
 
+// Складові запису: з колонок variant / brand / serial, а для старих записів (без колонок) розбираємо назву
+const itemParts = item => {
+  const parsed = parseItemName(item.item_name)
+  if (!(item.variant || item.brand || item.serial)) return parsed
+  return { base: parsed.base, detail: item.variant || '', brand: item.brand || '', serial: item.serial || '' }
+}
+
 // Рядки звіту: окремі колонки для виду, марки, серійного номера, кількості й одиниці виміру
 const buildReportRows = list => {
   const posIndex = name => { const i = POSITIONS.indexOf(name); return i < 0 ? 999 : i }
   const cmp = (a, b) => String(a).localeCompare(String(b), 'uk')
   return (list || [])
-    .map(item => ({ item, p: parseItemName(item.item_name) }))
+    .map(item => ({ item, p: itemParts(item) }))
     .sort((a, b) =>
       posIndex(a.item.position_name) - posIndex(b.item.position_name) ||
       cmp(a.item.category, b.item.category) || cmp(a.p.base, b.p.base) ||
@@ -439,7 +461,7 @@ const buildReportRows = list => {
 const buildSummaryRows = (list, withPosition) => {
   const groups = new Map()
   for (const item of list || []) {
-    const p = parseItemName(item.item_name)
+    const p = itemParts(item)
     const label = p.detail || p.brand
     const key = [withPosition ? item.position_name : '', item.category, p.base, label].join('\u0001')
     if (!groups.has(key)) {

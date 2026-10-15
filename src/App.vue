@@ -33,7 +33,7 @@ const PRESET_ITEMS = [
   { name: 'Планшети', category: 'БПЛА', needsSerial: true, hasModel: true, brandLabel: 'Назва пристрою' },
   { name: 'Дрони', category: 'БПЛА', variantLabel: 'модель дрона', variants: ['Mavic 3 Pro', 'Mavic 3T', 'Mavic 3TA', 'Mavic 4 Pro "Панда"', 'Mavic 4 Pro "Лікар"', 'Matrice 4T', 'Outel', 'Matrice 4'] },
   { name: 'Перехідники', category: 'Інше', variants: ['Для 3 серії', 'Для 4 Pro', 'Для Outel'] },
-  { name: 'БК', category: 'Боєприпаси', variants: ['ВОГ', 'Патрони 5.56'] },
+  { name: 'БК', category: 'Боєприпаси', variants: ['ВОГ-17', 'Патрони 5.56'] },
   { name: 'Скиди', category: 'БПЛА', variants: ['Одинарний', 'Подвійний'] },
   { name: 'Рупор', category: 'Зв\'язок', variants: ['Для 3 серії', 'Для 4 Pro', 'Для Матріс'] },
   { name: 'Зарядка до рації', category: 'Зв\'язок', needsSerial: true, noBrand: true },

@@ -7,6 +7,7 @@ import { supabase } from './supabase.js'
 // kit: номер KIT вручну (кожен Старлінк додається окремо);
 // extra: необов'язкова додаткова позиція з кількістю (роутер до Старлінка, павук до рації), зберігається окремим записом
 // variants: список видів (обов'язковий вибір); freeName: вільна назва; needsSerial: серійний номер (noBrand: без марки);
+// hasModel: окреме поле «Модель» (brandLabel: підпис поля марки/назви); в Excel назва і модель йдуть в одну колонку «Марка»
 // unit: одиниця виміру ('л'; за замовчуванням шт.); lengthM: довжина одного відрізка в метрах + кількість відрізків
 const PRESET_ITEMS = [
   { name: 'Старлінк', category: 'Зв\'язок', kit: true, extra: { name: 'Роутер Старлінк', label: 'Роутер', plural: 'роутерів' }, variantLabel: 'версію', variants: ['Міні', '2 версія', '3 версія'] },
@@ -29,7 +30,7 @@ const PRESET_ITEMS = [
   { name: 'Вогнегасники', category: 'Спорядження' },
   { name: 'Пульти до дронів', category: 'БПЛА', variants: ['Для 4 Pro', 'Для Матріс', 'Для Outel', 'Для 3 серії'] },
   { name: 'Батарейки до дронів', category: 'БПЛА', variants: ['Аутель', 'Мавік 3', 'Матріс', 'Мавік 4 Pro'] },
-  { name: 'Планшети', category: 'БПЛА', needsSerial: true },
+  { name: 'Планшети', category: 'БПЛА', needsSerial: true, hasModel: true, brandLabel: 'Назва пристрою' },
   { name: 'Дрони', category: 'БПЛА', variantLabel: 'модель дрона', variants: ['Mavic 3 Pro', 'Mavic 3T', 'Mavic 3TA', 'Mavic 4 Pro "Панда"', 'Mavic 4 Pro "Лікар"', 'Matrice 4T', 'Outel', 'Matrice 4'] },
   { name: 'Перехідники', category: 'Інше', variants: ['Для 3 серії', 'Для 4 Pro', 'Для Outel'] },
   { name: 'БК', category: 'Боєприпаси', variants: ['ВОГ', 'Патрони 5.56'] },
@@ -82,6 +83,7 @@ const notes = ref('')
 const brand = ref('')
 const serial = ref('')
 const variant = ref('')
+const deviceModel = ref('')
 const customName = ref('')
 const kitNumbers = ref('')
 const lengthM = ref('')
@@ -154,7 +156,7 @@ const onPresetChange = () => {
   const preset = PRESET_ITEMS.find(p => p.name === selectedPresetItem.value)
   if (preset) category.value = preset.category
   brand.value = ''
-  serial.value = ''
+  serial.value = ''; deviceModel.value = ''
   variant.value = ''
   customName.value = ''
   lengthM.value = ''
@@ -268,12 +270,14 @@ const addItem = async () => {
   if (preset && preset.needsSerial) {
     const b = preset.noBrand ? '' : brand.value.trim()
     const sn = serial.value.trim()
-    if (!preset.noBrand && !b) { showMsg('Вкажіть марку', true); return }
+    const m = preset.hasModel ? deviceModel.value.trim() : ''
+    if (!preset.noBrand && !b) { showMsg(preset.hasModel ? 'Вкажіть назву пристрою' : 'Вкажіть марку', true); return }
     if (!sn) { showMsg('Вкажіть серійний номер', true); return }
-    if (/[,;\n]/.test(b + sn)) { showMsg('Вводьте один серійний номер без ком: кожна одиниця додається окремо', true); return }
-    fullName = preset.noBrand ? `${preset.name} — S/N ${sn}` : `${preset.name} — ${b}, S/N ${sn}`
+    if (preset.hasModel && !m) { showMsg('Вкажіть модель', true); return }
+    if (/[,;\n]/.test(b + m + sn)) { showMsg('Вводьте один серійний номер без ком: кожна одиниця додається окремо', true); return }
+    fullName = preset.noBrand ? `${preset.name} — S/N ${sn}` : `${preset.name} — ${[b, m].filter(Boolean).join(' ')}, S/N ${sn}`
     qty = 1
-    cols = { brand: b || null, serial: sn }
+    cols = { brand: b || null, variant: m || null, serial: sn }
     extraN = parseExtraQty(preset)
     if (extraN === null) return
 
@@ -362,7 +366,7 @@ const addItem = async () => {
   } else {
     notes.value = ''
     quantity.value = 1
-    serial.value = ''
+    serial.value = ''; deviceModel.value = ''
     customName.value = ''
     lengthM.value = ''
     extraQty.value = ''
@@ -431,7 +435,7 @@ const updateItemStatus = async (id, newStatus) => {
 // Редагування запису: марка, серійний номер / KIT, вид, довжина відрізка, назва, примітки
 // (кількість і статус міняються прямо в таблиці)
 const editingId = ref(null)
-const editForm = ref({ fullName: '', brand: '', serial: '', variant: '', name: '', length: '', notes: '' })
+const editForm = ref({ fullName: '', brand: '', serial: '', variant: '', name: '', model: '', length: '', notes: '' })
 const editingItem = computed(() => items.value.find(i => i.id === editingId.value) || null)
 const editPreset = computed(() => (editingItem.value ? presetOf(editingItem.value.item_name) : null))
 
@@ -444,6 +448,7 @@ const startEdit = item => {
     serial: p.serial,
     variant: p.detail,
     name: p.detail,
+    model: p.detail,
     length: preset && preset.lengthM ? String(parseFloat(p.detail) || '') : '',
     notes: item.notes || ''
   }
@@ -471,11 +476,13 @@ const saveEdit = async () => {
   } else if (preset && preset.needsSerial) {
     const b = preset.noBrand ? '' : f.brand.trim()
     const sn = f.serial.trim()
-    if (!preset.noBrand && !b) { showMsg('Вкажіть марку', true); return }
+    const m = preset.hasModel ? String(f.model || '').trim() : ''
+    if (!preset.noBrand && !b) { showMsg(preset.hasModel ? 'Вкажіть назву пристрою' : 'Вкажіть марку', true); return }
     if (!sn) { showMsg('Вкажіть серійний номер', true); return }
-    if (hasComma(b + sn)) { showMsg('Вводьте один серійний номер без ком', true); return }
-    newName = preset.noBrand ? `${preset.name} — S/N ${sn}` : `${preset.name} — ${b}, S/N ${sn}`
-    cols = { variant: null, brand: b || null, serial: sn }
+    if (preset.hasModel && !m) { showMsg('Вкажіть модель', true); return }
+    if (hasComma(b + m + sn)) { showMsg('Вводьте один серійний номер без ком', true); return }
+    newName = preset.noBrand ? `${preset.name} — S/N ${sn}` : `${preset.name} — ${[b, m].filter(Boolean).join(' ')}, S/N ${sn}`
+    cols = { variant: m || null, brand: b || null, serial: sn }
   } else if (preset && preset.variants) {
     const v = f.variant.trim()
     if (!v) { showMsg(`Оберіть ${preset.variantLabel || 'вид'}`, true); return }
@@ -587,6 +594,9 @@ const itemParts = item => {
 }
 
 // Рядки звіту: окремі колонки для виду, марки, серійного номера, кількості й одиниці виміру
+// Для планшетів назва пристрою й модель йдуть в одну колонку «Марка»
+const mergesModel = base => { const x = PRESET_ITEMS.find(z => z.name === base); return !!(x && x.hasModel) }
+
 const buildReportRows = list => {
   const posIndex = name => { const i = POSITIONS.indexOf(name); return i < 0 ? 999 : i }
   const cmp = (a, b) => String(a).localeCompare(String(b), 'uk', { numeric: true })
@@ -600,8 +610,8 @@ const buildReportRows = list => {
       'Позиція': item.position_name,
       'Категорія': item.category,
       'Найменування': p.base,
-      'Вид / модель / назва': p.detail,
-      'Марка': p.brand,
+      'Вид / модель / назва': mergesModel(p.base) ? '' : p.detail,
+      'Марка': mergesModel(p.base) ? [p.brand, p.detail].filter(Boolean).join(' ') : p.brand,
       'Серійний номер / KIT': p.serial,
       'Статус': item.status,
       'Кількість': Number(item.quantity),
@@ -617,7 +627,7 @@ const buildSummaryRows = (list, withPosition) => {
   const groups = new Map()
   for (const item of list || []) {
     const p = itemParts(item)
-    const label = p.detail || p.brand
+    const label = [p.brand, p.detail].filter(Boolean).join(' ')
     const key = [withPosition ? item.position_name : '', item.category, p.base, label].join('\u0001')
     if (!groups.has(key)) {
       groups.set(key, { pos: withPosition ? item.position_name : 'Усі позиції', cat: item.category, base: p.base, label, unit: unitOf(item.item_name), ok: 0, rep: 0, need: 0 })
@@ -711,8 +721,10 @@ const exportExcel = async () => {
       </template>
 
       <template v-else-if="editPreset && editPreset.needsSerial">
-      <label v-if="!editPreset.noBrand" class="modal-label">Марка *</label>
+      <label v-if="!editPreset.noBrand" class="modal-label">{{ editPreset.brandLabel || 'Марка' }} *</label>
       <input v-if="!editPreset.noBrand" v-model="editForm.brand" class="styled-input" />
+<label v-if="editPreset.hasModel" class="modal-label">Модель *</label>
+<input v-if="editPreset.hasModel" v-model="editForm.model" class="styled-input" />
       <label class="modal-label">Серійний номер *</label>
       <input v-model="editForm.serial" class="styled-input" />
       </template>
@@ -767,8 +779,9 @@ const exportExcel = async () => {
                                                                                             <option v-for="preset in PRESET_ITEMS" :key="preset.name" :value="preset.name">{{ preset.name }}</option>
                                                                                                       </select>
 
-          <div v-if="currentPreset && currentPreset.needsSerial" class="qty-notes-row">
-            <input v-model="brand" placeholder="Марка *" class="styled-input notes-input" />
+          <div v-if="currentPreset && currentPreset.needsSerial" class="serial-row">
+            <input v-if="!currentPreset.noBrand" v-model="brand" :placeholder="(currentPreset.brandLabel || 'Марка') + ' *'" class="styled-input notes-input" />
+<input v-if="currentPreset.hasModel" v-model="deviceModel" placeholder="Модель *" class="styled-input notes-input" />
             <input v-model="serial" placeholder="Серійний номер *" class="styled-input notes-input" />
           </div>
 
@@ -924,7 +937,9 @@ const exportExcel = async () => {
 .modal-save { flex: 1; width: auto; padding: 10px 14px; font-size: 14px; }
 .del-btn { color: #dc2626; background: #fee2e2; border: none; cursor: pointer; font-weight: bold; font-size: 13px; padding: 6px 10px; border-radius: 6px; }
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    .router-row { display: flex; align-items: center; gap: 8px; }
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    .serial-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.serial-row .styled-input { flex: 1 1 140px; min-width: 0; }
+.router-row { display: flex; align-items: center; gap: 8px; }
 .router-label { font-size: 12px; font-weight: 600; color: #475569; }
 .report-scope { margin-top: 10px; }
 .report-select { width: 100%; }

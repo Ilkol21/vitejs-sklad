@@ -39,6 +39,19 @@ as $$
   end;
 $$;
 
+-- 3b. Підписники бота (заповнюється автоматично, див. telegram_subscribers.sql).
+-- RLS увімкнено без політик + права відкликано: через публічний ключ таблиця недоступна.
+create table if not exists public.telegram_chats (
+  chat_id    bigint primary key,
+  name       text,
+  username   text,
+  active     boolean not null default false,
+  fails      int not null default 0,
+  created_at timestamptz not null default now()
+);
+alter table public.telegram_chats enable row level security;
+revoke all on public.telegram_chats from anon, authenticated;
+
 -- 4. Функція-тригер
 create or replace function public.notify_telegram_items_change()
 returns trigger
@@ -62,7 +75,7 @@ begin
     from vault.decrypted_secrets where name = 'telegram_chat_id' limit 1;
 
   -- Якщо бот ще не налаштований, нічого не робимо (запис у базу не ламається)
-  if v_token is null or v_chats is null then
+  if v_token is null then
     return null;
   end if;
 
@@ -139,8 +152,15 @@ begin
 
   v_text := v_text || '🕒 ' || v_time;
 
-  -- chat_id може бути списком через кому (кілька командирів / група)
-  foreach v_chat in array string_to_array(replace(v_chats, ' ', ''), ',') loop
+  -- Отримувачі: chat_id із Vault (через кому) + усі активні підписники бота.
+  -- union прибирає дублікати, тож людина в обох списках отримає одне повідомлення.
+  for v_chat in
+    select trim(c)
+      from unnest(string_to_array(replace(coalesce(v_chats, ''), ' ', ''), ',')) as c
+     where trim(c) <> ''
+    union
+    select chat_id::text from public.telegram_chats where active
+  loop
     perform net.http_post(
       url     := 'https://api.telegram.org/bot' || v_token || '/sendMessage',
       body    := jsonb_build_object(

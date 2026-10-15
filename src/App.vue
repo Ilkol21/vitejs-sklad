@@ -173,6 +173,38 @@ const addItem = async () => {
     fullName = `${preset.name} — ${droneModel.value}`
   }
 
+  if (!Number.isFinite(qty) || qty < 1) {
+    showMsg('Вкажіть кількість (від 1)', true)
+    return
+  }
+
+  // Таке саме майно на позиції з тим самим статусом не дублюємо: додаємо кількість до наявного рядка
+  if (!(preset && preset.needsSerial)) {
+    const { data: same, error: sameErr } = await supabase.from('items').select('id, quantity, notes')
+      .eq('position_name', selectedPositionName.value).eq('item_name', fullName)
+      .eq('status', status.value).limit(1)
+    if (sameErr) {
+      showMsg('Помилка перевірки: ' + sameErr.message, true)
+      return
+    }
+    if (same && same.length) {
+      const row = same[0]
+      const total = Number(row.quantity) + qty
+      const extra = notes.value.trim()
+      const mergedNotes = !extra ? (row.notes || '') : (row.notes ? (row.notes.includes(extra) ? row.notes : row.notes + '; ' + extra) : extra)
+      const { error: updErr } = await supabase.from('items').update({ quantity: total, notes: mergedNotes }).eq('id', row.id)
+      if (updErr) {
+        showMsg('Помилка оновлення: ' + updErr.message, true)
+        return
+      }
+      notes.value = ''
+      quantity.value = 1
+      showMsg(`Таке майно вже є: кількість збільшено, тепер ${total} шт.`)
+      loadItems()
+      return
+    }
+  }
+
         const { error } = await supabase.from('items').insert([
                 {
                           position_name: selectedPositionName.value,
@@ -186,7 +218,7 @@ quantity: qty,
 
           if (error) {
                 console.error('SUPABASE ERROR:', error)
-                    showMsg('Помилка бази: ' + error.message, true)
+                    showMsg(error.code === '23505' ? 'Такий запис уже є, оновіть сторінку' : 'Помилка бази: ' + error.message, true)
           } else {
                 notes.value = ''
 quantity.value = 1
@@ -203,12 +235,40 @@ const updateItemQty = async (id, newQty) => {
 }
 
 const updateItemStatus = async (id, newStatus) => {
-      const { error } = await supabase.from('items').update({ status: newStatus }).eq('id', id)
-        if (error) {
-                showMsg('Помилка статусу: ' + error.message, true)
-        } else {
-                loadItems()
-        }
+  const current = items.value.find(i => i.id === id)
+  if (!current || current.status === newStatus) return
+
+  // Такий самий рядок (позиція + назва + статус) не дублюємо: кількість зливається в наявний
+  const { data: same, error: sameErr } = await supabase.from('items').select('id, quantity')
+    .eq('position_name', current.position_name).eq('item_name', current.item_name)
+    .eq('status', newStatus).neq('id', id).limit(1)
+  if (sameErr) {
+    showMsg('Помилка статусу: ' + sameErr.message, true)
+    loadItems()
+    return
+  }
+  if (same && same.length) {
+    const target = same[0]
+    const total = Number(target.quantity) + Number(current.quantity)
+    const { error: mergeErr } = await supabase.from('items').update({ quantity: total }).eq('id', target.id)
+    if (mergeErr) {
+      showMsg('Помилка об\'єднання: ' + mergeErr.message, true)
+      loadItems()
+      return
+    }
+    const { error: delErr } = await supabase.from('items').delete().eq('id', id)
+    if (delErr) showMsg('Помилка видалення: ' + delErr.message, true)
+    else showMsg(`Об'єднано з наявним рядком: тепер ${total} шт.`)
+    loadItems()
+    return
+  }
+
+  const { error } = await supabase.from('items').update({ status: newStatus }).eq('id', id)
+  if (error) {
+    showMsg('Помилка статусу: ' + error.message, true)
+  } else {
+    loadItems()
+  }
 }
 
 const deleteItem = async (id) => {

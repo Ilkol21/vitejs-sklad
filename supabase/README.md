@@ -62,6 +62,39 @@ select vault.update_secret(id, 'НОВЕ_ЗНАЧЕННЯ') from vault.secrets w
 drop trigger if exists items_telegram_notify on public.items;
 ```
 
+## Автопідписка за кодом доступу
+
+Кожен, хто напише боту **код доступу**, отримує такі самі сповіщення (додавати chat_id вручну не потрібно).
+Без коду бот мовчить: ім'я бота публічне, тому код захищає дані про склад від сторонніх.
+
+Команди в боті: `/start` (вітання), `КОД` або `/start КОД` (підписка), `/stop` (відписка).
+Після 5 невірних спроб чат блокується. Якщо людина заблокувала бота, сповіщення для неї вимикаються.
+
+### Налаштування (один раз)
+1. Виконати `telegram_notifications.sql` (створює таблицю `telegram_chats`), потім `telegram_subscribers.sql`.
+2. Додати секрети у Vault (значення придумати свої, код доступу передавати людям лише в особистих повідомленнях):
+```sql
+select vault.create_secret('КОД_ДОСТУПУ', 'telegram_access_code');
+select vault.create_secret('ДОВГИЙ_ВИПАДКОВИЙ_РЯДОК', 'telegram_webhook_secret');
+```
+   Секрет вебхука: лише латинські літери, цифри, `_` і `-`.
+3. Вказати Telegram, куди надсилати повідомлення боту (підставити токен, секрет і ключ `anon` з `src/supabase.js`):
+   Вкладений URL має бути закодований (`?` → `%3F`, `=` → `%3D`), інакше Telegram віддасть `&secret_token` зовнішньому запиту:
+```
+https://api.telegram.org/bot<ТОКЕН>/setWebhook?url=https%3A%2F%2F<ref>.supabase.co%2Frest%2Fv1%2Frpc%2Ftg_webhook%3Fapikey%3D<ANON_KEY>&secret_token=<СЕКРЕТ_ВЕБХУКА>&allowed_updates=%5B%22message%22%2C%22my_chat_member%22%5D
+```
+   Перевірка: `.../getWebhookInfo` (поле `last_error_message` має бути порожнім).
+   Після `setWebhook` метод `getUpdates` перестає працювати: це нормально.
+
+### Керування підписниками
+```sql
+select chat_id, name, username, active from public.telegram_chats order by created_at;  -- список
+update public.telegram_chats set active = false where chat_id = 123456789;               -- відключити
+update public.telegram_chats set fails = 0 where chat_id = 123456789;                    -- зняти блокування після невірних спроб
+```
+Змінити код доступу: `select vault.update_secret(id, 'НОВИЙ_КОД') from vault.secrets where name = 'telegram_access_code';`
+(підписані раніше люди продовжують отримувати сповіщення).
+
 ## Обмеження
 - Одна зміна = одне повідомлення. Масові зміни (наприклад, імпорт) дадуть багато повідомлень;
   Telegram обмежує ~20 повідомлень на хвилину в одну групу.

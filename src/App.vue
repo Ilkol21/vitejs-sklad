@@ -72,10 +72,23 @@ const PRESET_ITEMS = [
 
 const POSITIONS = ['Позиція «Чіпс»', 'Позиція «Зебра»', 'Позиція «Осло»', 'Позиція «Гарпун»']
 
-const unitName = ref(localStorage.getItem('unit_name') || '128 ОГШБр')
-const selectedPositionName = ref(POSITIONS[0])
+const readUnitName = () => {
+  try { return localStorage.getItem('unit_name') || '128 ОГШБр' } catch (e) { return '128 ОГШБр' }
+}
+const unitName = ref(readUnitName())
+// Остання відкрита позиція зберігається в браузері, тож після оновлення сторінки вона не скидається на першу
+const POSITION_KEY = 'selected_position'
+const readSavedPosition = () => {
+  try {
+    const saved = localStorage.getItem(POSITION_KEY)
+    return POSITIONS.includes(saved) ? saved : POSITIONS[0]
+  } catch (e) {
+    return POSITIONS[0]
+  }
+}
+const selectedPositionName = ref(readSavedPosition())
 // Для якої позиції формувати звіт: за замовчуванням для поточної (її змінює перемикач вгорі); '' = усі позиції
-const reportPosition = ref(POSITIONS[0])
+const reportPosition = ref(selectedPositionName.value)
 
 const selectedPresetItem = ref(PRESET_ITEMS[0].name)
 const category = ref(PRESET_ITEMS[0].category)
@@ -124,7 +137,7 @@ const showMsg = (msg, isError = false) => {
 }
 
 const saveUnitName = () => {
-      localStorage.setItem('unit_name', unitName.value)
+      try { localStorage.setItem('unit_name', unitName.value) } catch (e) { /* сховище недоступне */ }
         showMsg('Назву підрозділу збережено!')
 }
 
@@ -165,6 +178,7 @@ onUnmounted(() => {
 watch(selectedPositionName, (pos) => {
       // Звіт за замовчуванням іде для відкритої позиції: на Зебрі кнопка Excel дає звіт Зебри
       reportPosition.value = pos
+      try { localStorage.setItem(POSITION_KEY, pos) } catch (e) { /* сховище недоступне: працюємо без збереження */ }
       loadItems()
 })
 

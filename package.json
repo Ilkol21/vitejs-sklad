@@ -1,16 +1,16 @@
 {
-  "name": "vite-vue-starter",
+  "name": "vitejs-sklad",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --import ./tests/helpers/register.mjs --test tests/*.test.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.3",
-    "dexie": "^4.4.6",
     "vue": "^3.5.43",
     "xlsx": "^0.18.5"
   },

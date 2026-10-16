@@ -1,0 +1,90 @@
+import { POSITIONS, STATUS } from '../config/app.js'
+import { round2 } from '../utils/number.js'
+import { itemParts } from './itemName.js'
+import { presetOf, unitOf, isPresence, mergesModel } from './catalog.js'
+
+const positionIndex = name => {
+  const i = POSITIONS.indexOf(name)
+  return i < 0 ? 999 : i
+}
+
+const compareText = (a, b) => String(a).localeCompare(String(b), 'uk', { numeric: true })
+
+// Рядки звіту: окремі колонки для виду, марки, серійного номера, кількості й одиниці виміру
+// Для планшетів назва пристрою й модель йдуть в одну колонку «Марка»
+export const buildReportRows = list =>
+  (list || [])
+    .map(item => ({ item, p: itemParts(item) }))
+    .sort((a, b) =>
+      positionIndex(a.item.position_name) - positionIndex(b.item.position_name) ||
+      compareText(a.item.category, b.item.category) || compareText(a.p.base, b.p.base) ||
+      compareText(a.p.detail, b.p.detail) || compareText(a.p.serial, b.p.serial) ||
+      compareText(a.item.status, b.item.status))
+    .map(({ item, p }) => ({
+      'Позиція': item.position_name,
+      'Категорія': item.category,
+      'Найменування': p.base,
+      'Вид / модель / назва': mergesModel(p.base) ? '' : p.detail,
+      'Марка': mergesModel(p.base) ? [p.brand, p.detail].filter(Boolean).join(' ') : p.brand,
+      'Серійний номер / KIT': p.serial,
+      'Статус': item.status,
+      'Кількість': isPresence(item.item_name) ? '' : Number(item.quantity),
+      'Од.': isPresence(item.item_name) ? '' : unitOf(item.item_name),
+      'Наявність': isPresence(item.item_name)
+        ? (Number(item.quantity) > 0 ? 'Є' : 'НЕМАЄ')
+        : (Number(item.quantity) > 0 ? '' : 'НЕМАЄ'),
+      'Примітки': item.notes || ''
+    }))
+
+// Підсумок: однакове майно рахується разом (KIT і серійні номери не розділяють групу).
+// «Разом є» = На позиції + На ремонт (це майно, яке є); «Потреба» окремо, бо це не наявність.
+export const buildSummaryRows = (list, withPosition) => {
+  const groups = new Map()
+  for (const item of list || []) {
+    const p = itemParts(item)
+    let label = [p.brand, p.detail].filter(Boolean).join(' ')
+    const pr = presetOf(item.item_name)
+    if (pr && pr.callsign) label = label.replace(/\s+"[^"]*"\s*$/, '')
+    const key = [withPosition ? item.position_name : '', item.category, p.base, label].join('\u0001')
+    if (!groups.has(key)) {
+      groups.set(key, {
+        pos: withPosition ? item.position_name : 'Усі позиції',
+        cat: item.category,
+        base: p.base,
+        label,
+        unit: unitOf(item.item_name),
+        pres: isPresence(item.item_name),
+        ok: 0,
+        rep: 0,
+        need: 0
+      })
+    }
+    const g = groups.get(key)
+    const q = Number(item.quantity) || 0
+    if (item.status === STATUS.OK) g.ok = round2(g.ok + q)
+    else if (item.status === STATUS.REPAIR) g.rep = round2(g.rep + q)
+    else if (item.status === STATUS.NEED) g.need = round2(g.need + q)
+  }
+  return [...groups.values()]
+    .sort((a, b) =>
+      positionIndex(a.pos) - positionIndex(b.pos) || compareText(a.cat, b.cat) ||
+      compareText(a.base, b.base) || compareText(a.label, b.label))
+    .map(g => ({
+      'Позиція': g.pos,
+      'Категорія': g.cat,
+      'Найменування': g.base,
+      'Вид / марка': g.label,
+      'На позиції': g.pres ? '' : g.ok,
+      'На ремонт': g.pres ? '' : g.rep,
+      'Разом є': g.pres ? '' : round2(g.ok + g.rep),
+      'Потреба': g.pres ? '' : g.need,
+      'Од.': g.pres ? '' : g.unit,
+      'Наявність': g.pres
+        ? (round2(g.ok + g.rep) > 0 ? 'Є' : 'НЕМАЄ')
+        : (round2(g.ok + g.rep) > 0 ? '' : 'НЕМАЄ')
+    }))
+}
+
+// «Позиція «Чіпс»» -> «Чіпс» (для підказок і імені файлу; без символів, заборонених в іменах файлів)
+export const positionLabel = name =>
+  String(name || '').replace(/^Позиція\s+/, '').replace(/[«»"\\/:*?<>|]/g, '').trim()

@@ -1,5 +1,37 @@
-# Vue 3 + Vite
+# Облік майна БПЛА (vitejs-sklad)
 
-This template should help get you started developing with Vue 3 in Vite. The template uses Vue 3 `<script setup>` SFCs, check out the [script setup docs](https://v3.vuejs.org/api/sfc-script-setup.html#sfc-script-setup) to learn more.
+Веб-застосунок для обліку майна на позиціях: додавання, редагування, зміна кількості й статусу,
+вивантаження звіту в Excel. Дані зберігаються в Supabase і оновлюються в реальному часі.
 
-Learn more about IDE Support for Vue in the [Vue Docs Scaling up Guide](https://vuejs.org/guide/scaling-up/tooling.html#ide-support).
+## Запуск
+
+```
+npm install
+npm run dev      # режим розробки
+npm run build    # збірка в dist/
+npm test         # тести чистої логіки та сервісів
+```
+
+## Структура `src/`
+
+| Папка | Призначення |
+| --- | --- |
+| `config/` | Налаштування: позиції, статуси, каталог майна (`presets.js`) |
+| `domain/` | Чиста логіка без побічних ефектів: назви записів, перевірки, рядки звіту |
+| `api/` | Доступ до таблиці `items` в Supabase (`itemsRepository.js`) |
+| `services/` | Сценарії: додавання, редагування, дії з рядками, експорт в Excel |
+| `composables/` | Стан і зв'язок сервісів з Vue |
+| `components/` | Компоненти інтерфейсу |
+| `styles/` | `base.css` (глобальне) і `app.css` (стилі застосунку) |
+| `utils/` | Дрібні допоміжні функції |
+
+Як додати нове майно: додати рядок у `src/config/presets.js` (опис полів у коментарі вгорі файлу).
+
+## База даних
+
+SQL-скрипти та інструкція для сповіщень у Telegram лежать у `supabase/` (див. `supabase/README.md`).
+
+## Тести
+
+Тести лежать у `tests/` і запускаються вбудованим `node --test` (без додаткових залежностей).
+`npm test` перевіряє розбір назв, звіт, а також сервіси на підміненій базі.

@@ -8,6 +8,7 @@ import { supabase } from './supabase.js'
 // extra: необов'язкова додаткова позиція з кількістю (роутер до Старлінка, павук до рації), зберігається окремим записом
 // variants: список видів (обов'язковий вибір); freeName: вільна назва; needsSerial: серійний номер (noBrand: без марки);
 // hasModel: окреме поле «Модель» (brandLabel: підпис поля марки/назви); в Excel назва і модель йдуть в одну колонку «Марка»
+// callsign: необов'язкове ім'я дрона (у назві пишеться в лапках, напр. Mavic 4 Pro "Панда")
 // presence: без підрахунку, лише «Є / Немає» (у базі 1 або 0)
 // unit: одиниця виміру ('л'; за замовчуванням шт.); lengthM: довжина одного відрізка в метрах + кількість відрізків
 const PRESET_ITEMS = [
@@ -32,7 +33,7 @@ const PRESET_ITEMS = [
   { name: 'Пульти до дронів', category: 'БПЛА', variants: ['Для 4 Pro', 'Для Матріс', 'Для Outel', 'Для 3 серії'] },
   { name: 'Батарейки до дронів', category: 'БПЛА', variants: ['Аутель', 'Мавік 3', 'Матріс', 'Мавік 4 Pro'] },
   { name: 'Планшети', category: 'БПЛА', needsSerial: true, hasModel: true, brandLabel: 'Назва пристрою' },
-  { name: 'Дрони', category: 'БПЛА', variantLabel: 'модель дрона', variants: ['Mavic 3 Pro', 'Mavic 3T', 'Mavic 3TA', 'Mavic 4 Pro "Панда"', 'Mavic 4 Pro "Лікар"', 'Matrice 4T', 'Outel', 'Matrice 4'] },
+  { name: 'Дрони', category: 'БПЛА', callsign: true, variantLabel: 'модель дрона', variants: ['Mavic 3 Pro', 'Mavic 3T', 'Mavic 3TA', 'Mavic 4 Pro', 'Matrice 4T', 'Outel', 'Matrice 4'] },
   { name: 'Перехідники', category: 'Інше', variants: ['Для 3 серії', 'Для 4 Pro', 'Для Outel'] },
   { name: 'БК', category: 'Боєприпаси', variants: ['ВОГ-17', 'Патрони 5.56'] },
   { name: 'Скиди', category: 'БПЛА', variants: ['Одинарний', 'Подвійний'] },
@@ -85,6 +86,8 @@ const brand = ref('')
 const serial = ref('')
 const variant = ref('')
 const deviceModel = ref('')
+const callsign = ref('')
+watch(callsign, v => { if (String(v || '').trim()) quantity.value = 1 })
 const customName = ref('')
 const kitNumbers = ref('')
 const lengthM = ref('')
@@ -103,6 +106,13 @@ const isPresence = name => { const p = presetOf(name); return !!(p && p.presence
 // Кількість для тексту: для «Є / Немає» слово, для решти число з одиницею
 const qtyText = (name, q) => (isPresence(name) ? (Number(q) > 0 ? 'є' : 'немає') : `${q} ${unitOf(name)}`)
 const round2 = n => Math.round(Number(n) * 100) / 100
+// Ім'я дрона: без лапок і зайвих пробілів; у назві записується в лапках
+const cleanCallsign = s => String(s || '').replace(/["«»“”„]/g, '').replace(/\s+/g, ' ').trim().slice(0, 40)
+// «Mavic 4 Pro "Панда"» -> { model: 'Mavic 4 Pro', name: 'Панда' }
+const splitCallsign = s => {
+  const m = String(s || '').match(/^(.*?)\s+"([^"]*)"\s*$/)
+  return m ? { model: m[1].trim(), name: m[2].trim() } : { model: String(s || '').trim(), name: '' }
+}
 
 const items = ref([])
 const toastMessage = ref('')
@@ -165,6 +175,7 @@ const onPresetChange = () => {
   serial.value = ''; deviceModel.value = ''
   variant.value = ''
   customName.value = ''
+  callsign.value = ''
   lengthM.value = ''
   kitNumbers.value = ''
   extraQty.value = ''
@@ -300,8 +311,21 @@ const addItem = async () => {
     }
   } else if (preset && preset.variants) {
     if (!variant.value) { showMsg(`Оберіть ${preset.variantLabel || 'вид'}`, true); return }
-    fullName = `${preset.name} — ${variant.value}`
-    cols = { variant: variant.value }
+    let v = variant.value
+    if (preset.callsign) {
+      const nm = cleanCallsign(callsign.value)
+      if (nm) {
+        v = `${variant.value} "${nm}"`
+        qty = 1
+        // Дрон з іменем один: таке ім'я не повторюється ні на одній позиції (незалежно від статусу)
+        const { data: named, error: namedErr } = await supabase.from('items').select('item_name, position_name, variant, brand, serial').like('item_name', `${preset.name} — %`)
+        if (namedErr) { showMsg('Помилка перевірки: ' + namedErr.message, true); return }
+        const taken = (named || []).find(r => itemParts(r).detail.toLowerCase() === v.toLowerCase())
+        if (taken) { showMsg(`Дрон з іменем «${nm}» уже є: ${taken.position_name}`, true); return }
+      }
+    }
+    fullName = `${preset.name} — ${v}`
+    cols = { variant: v }
   } else if (preset && preset.freeName) {
     const n = customName.value.trim()
     if (!n) { showMsg('Вкажіть назву', true); return }
@@ -382,6 +406,7 @@ const addItem = async () => {
     quantity.value = 1
     serial.value = ''; deviceModel.value = ''
     customName.value = ''
+    callsign.value = ''
     lengthM.value = ''
     extraQty.value = ''
     let extraMsg = ''
@@ -449,7 +474,7 @@ const updateItemStatus = async (id, newStatus) => {
 // Редагування запису: марка, серійний номер / KIT, вид, довжина відрізка, назва, примітки
 // (кількість і статус міняються прямо в таблиці)
 const editingId = ref(null)
-const editForm = ref({ fullName: '', brand: '', serial: '', variant: '', name: '', model: '', length: '', notes: '' })
+const editForm = ref({ fullName: '', brand: '', serial: '', variant: '', name: '', model: '', callsign: '', length: '', notes: '' })
 const editingItem = computed(() => items.value.find(i => i.id === editingId.value) || null)
 const editPreset = computed(() => (editingItem.value ? presetOf(editingItem.value.item_name) : null))
 
@@ -465,6 +490,11 @@ const startEdit = item => {
     model: p.detail,
     length: preset && preset.lengthM ? String(parseFloat(p.detail) || '') : '',
     notes: item.notes || ''
+  }
+  if (preset && preset.callsign) {
+    const parts = splitCallsign(p.detail)
+    editForm.value.variant = parts.model
+    editForm.value.callsign = parts.name
   }
   editingId.value = item.id
 }
@@ -500,8 +530,20 @@ const saveEdit = async () => {
   } else if (preset && preset.variants) {
     const v = f.variant.trim()
     if (!v) { showMsg(`Оберіть ${preset.variantLabel || 'вид'}`, true); return }
-    newName = `${preset.name} — ${v}`
-    cols = { variant: v }
+    let vv = v
+    if (preset.callsign) {
+      const nm = cleanCallsign(f.callsign)
+      if (nm) {
+        if (Number(item.quantity) > 1) { showMsg('Дрон з іменем один: спершу зменште кількість до 1', true); return }
+        vv = `${v} "${nm}"`
+        const { data: ds, error: dErr } = await supabase.from('items').select('id, item_name, position_name, variant, brand, serial').like('item_name', `${preset.name} — %`)
+        if (dErr) { showMsg('Помилка перевірки: ' + dErr.message, true); return }
+        const clash = (ds || []).find(r => r.id !== item.id && itemParts(r).detail.toLowerCase() === vv.toLowerCase())
+        if (clash) { showMsg(`Дрон з іменем «${nm}» уже є: ${clash.position_name}`, true); return }
+      }
+    }
+    newName = `${preset.name} — ${vv}`
+    cols = { variant: vv }
   } else if (preset && preset.freeName) {
     const n = f.name.trim()
     if (!n) { showMsg('Вкажіть назву', true); return }
@@ -641,7 +683,9 @@ const buildSummaryRows = (list, withPosition) => {
   const groups = new Map()
   for (const item of list || []) {
     const p = itemParts(item)
-    const label = [p.brand, p.detail].filter(Boolean).join(' ')
+    let label = [p.brand, p.detail].filter(Boolean).join(' ')
+    const pr = presetOf(item.item_name)
+    if (pr && pr.callsign) label = label.replace(/\s+"[^"]*"\s*$/, '')
     const key = [withPosition ? item.position_name : '', item.category, p.base, label].join('\u0001')
     if (!groups.has(key)) {
       groups.set(key, { pos: withPosition ? item.position_name : 'Усі позиції', cat: item.category, base: p.base, label, unit: unitOf(item.item_name), pres: isPresence(item.item_name), ok: 0, rep: 0, need: 0 })
@@ -749,6 +793,8 @@ const exportExcel = async () => {
       <option v-if="editForm.variant && !editPreset.variants.includes(editForm.variant)" :value="editForm.variant">{{ editForm.variant }} (немає в списку)</option>
       <option v-for="m in editPreset.variants" :key="m" :value="m">{{ m }}</option>
       </select>
+      <label v-if="editPreset.callsign" class="modal-label">Ім'я дрона (необов'язково)</label>
+      <input v-if="editPreset.callsign" v-model="editForm.callsign" maxlength="40" class="styled-input" />
       </template>
 
       <template v-else-if="editPreset && editPreset.freeName">
@@ -804,6 +850,8 @@ const exportExcel = async () => {
             <option v-for="m in currentPreset.variants" :key="m" :value="m">{{ m }}</option>
           </select>
 
+          <input v-if="currentPreset && currentPreset.callsign" v-model="callsign" maxlength="40" placeholder="Ім'я дрона (необов'язково), напр. Панда" class="styled-input" />
+
           <input v-if="currentPreset && currentPreset.freeName" v-model="customName" placeholder="Назва *" class="styled-input" />
 
 <input v-if="currentPreset && currentPreset.lengthM" v-model="lengthM" type="number" min="0.1" step="0.1" placeholder="Довжина одного відрізка, м *" class="styled-input" />
@@ -826,7 +874,7 @@ const exportExcel = async () => {
 <option :value="1">Є</option>
 <option :value="0">Немає</option>
 </select>
-<input v-else type="number" v-model="quantity" :disabled="currentPreset && (currentPreset.needsSerial || currentPreset.kit)" min="0" :step="currentPreset && currentPreset.unit ? '0.1' : '1'" :placeholder="currentPreset && currentPreset.unit === 'л' ? 'Літри' : (currentPreset && currentPreset.unit === 'м' ? 'Метри' : (currentPreset && currentPreset.lengthM ? 'К-ть відрізків' : 'К-ть'))" class="styled-input qty-input font-bold" />
+<input v-else type="number" v-model="quantity" :disabled="currentPreset && (currentPreset.needsSerial || currentPreset.kit || (currentPreset.callsign && callsign.trim()))" min="0" :step="currentPreset && currentPreset.unit ? '0.1' : '1'" :placeholder="currentPreset && currentPreset.unit === 'л' ? 'Літри' : (currentPreset && currentPreset.unit === 'м' ? 'Метри' : (currentPreset && currentPreset.lengthM ? 'К-ть відрізків' : 'К-ть'))" class="styled-input qty-input font-bold" />
                                                                                                                                                                                                 <input v-model="notes" placeholder="Примітки / номер" class="styled-input notes-input" />
                                                                                                                                                                                                           </div>
 

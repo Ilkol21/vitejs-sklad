@@ -28,7 +28,7 @@ onBeforeUnmount(() => document.removeEventListener('click', closeOnOutsideClick)
 <template>
   <div ref="root" class="serial-field">
     <input v-model="serial" :placeholder="placeholder" class="styled-input" @input="open = false" />
-    <button type="button" class="serial-toggle" aria-label="Невідомо / Зафарбовано" @click="open = !open">▾</button>
+    <button type="button" class="serial-toggle" aria-label="Позначка: номер невідомий або зафарбований" @click="open = !open">▾</button>
     <ul v-if="open" class="serial-options">
       <li v-for="p in SERIAL_PLACEHOLDERS" :key="p">
         <button type="button" class="serial-option" @click="pick(p)">{{ p }}</button>

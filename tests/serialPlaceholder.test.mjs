@@ -12,8 +12,10 @@ const add = (form, repo) => addItem(form, { positionName: POS }, repo)
 const radio = (over = {}) => baseForm({ presetName: 'Рація', category: 'Зв\'язок', brand: 'Motorola', ...over })
 
 test('нормалізація позначок', () => {
-  assert.equal(normalizeSerial('  невідомо '), 'Невідомо')
-  assert.equal(normalizeSerial('ЗАФАРБОВАНО'), 'Зафарбовано')
+  assert.equal(normalizeSerial('  невідомо/зафарбовано '), 'Невідомо/Зафарбовано')
+  // Старі окремі позначки теж розпізнаються і стають однією
+  assert.equal(normalizeSerial('  невідомо '), 'Невідомо/Зафарбовано')
+  assert.equal(normalizeSerial('ЗАФАРБОВАНО'), 'Невідомо/Зафарбовано')
   assert.equal(normalizeSerial(' AB-1 '), 'AB-1')
   assert.equal(isPlaceholderSerial('невідомо'), true)
   assert.equal(isPlaceholderSerial('AB-1'), false)
@@ -23,7 +25,7 @@ test('«Невідомо» можна додавати кілька разів: 
   const { client, repo } = setup()
   const first = await add(radio({ serial: 'Невідомо' }), repo)
   assert.equal(first.message, 'Додано на позицію!')
-  assert.equal(client.state.rows[0].item_name, 'Рація — Motorola, S/N Невідомо')
+  assert.equal(client.state.rows[0].item_name, 'Рація — Motorola, S/N Невідомо/Зафарбовано')
   assert.equal(client.state.rows[0].serial, null)
   const second = await add(radio({ serial: 'невідомо' }), repo)
   assert.equal(second.message, 'Таке майно вже є: кількість збільшено, тепер 2 шт.')
@@ -54,16 +56,16 @@ test('планшет і зарядка без марки теж приймают
   const { client, repo } = setup()
   await add(baseForm({ presetName: 'Планшети', category: 'БПЛА', brand: 'Autel', deviceModel: 'EVO', serial: 'Невідомо' }), repo)
   await add(baseForm({ presetName: 'Зарядка до рації', category: 'Зв\'язок', serial: 'Зафарбовано' }), repo)
-  assert.deepEqual(client.state.rows.map(r => r.item_name), ['Планшети — Autel EVO, S/N Невідомо', 'Зарядка до рації — S/N Зафарбовано'])
+  assert.deepEqual(client.state.rows.map(r => r.item_name), ['Планшети — Autel EVO, S/N Невідомо/Зафарбовано', 'Зарядка до рації — S/N Невідомо/Зафарбовано'])
 })
 
 test('редагування: позначка відображається у формі, можна замінити на реальний номер з перевіркою', async () => {
-  const item = { id: 1, position_name: POS, item_name: 'Рація — Motorola, S/N Невідомо', category: 'x', status: 'На позиції', quantity: 1, notes: '', variant: null, brand: 'Motorola', serial: null }
+  const item = { id: 1, position_name: POS, item_name: 'Рація — Motorola, S/N Невідомо/Зафарбовано', category: 'x', status: 'На позиції', quantity: 1, notes: '', variant: null, brand: 'Motorola', serial: null }
   const taken = { id: 2, position_name: OTHER, item_name: 'Рація — Motorola, S/N 5', category: 'x', status: 'На позиції', quantity: 1, notes: '', variant: null, brand: 'Motorola', serial: '5' }
   const { client, repo } = setup([item, taken])
-  assert.equal(itemParts(item).serial, 'Невідомо')
+  assert.equal(itemParts(item).serial, 'Невідомо/Зафарбовано')
   const form = editFormFromItem(item)
-  assert.equal(form.serial, 'Невідомо')
+  assert.equal(form.serial, 'Невідомо/Зафарбовано')
   const preset = presetOf(item.item_name)
   const clash = await saveEdit(item, preset, { ...form, serial: '5' }, { confirm: () => true }, repo)
   assert.equal(clash.message, `Такий серійний номер уже є: ${OTHER}`)
@@ -76,7 +78,7 @@ test('редагування: позначка відображається у �
 test('редагування: реальний номер → «Зафарбовано» зливається з наявним рядком; рядок з кількома одиницями не стає унікальним', async () => {
   const mk = (id, serial, name, q) => ({ id, position_name: POS, item_name: `Рація — Motorola, S/N ${name}`, category: 'x', status: 'На позиції', quantity: q, notes: '', variant: null, brand: 'Motorola', serial })
   const real = mk(1, '9', '9', 1)
-  const unknown = mk(2, null, 'Зафарбовано', 2)
+  const unknown = mk(2, null, 'Невідомо/Зафарбовано', 2)
   const { client, repo } = setup([real, unknown])
   const preset = presetOf(real.item_name)
   const merged = await saveEdit(real, preset, { ...editFormFromItem(real), serial: 'Зафарбовано' }, { confirm: () => true }, repo)
@@ -92,8 +94,8 @@ const starlink = (over = {}) => baseForm({ presetName: 'Старлінк', categ
 test('Старлінк: KIT «Невідомо» можна додавати кілька разів, рядок не дублюється', async () => {
   const { client, repo } = setup()
   const first = await add(starlink({ kitNumbers: 'невідомо' }), repo)
-  assert.equal(first.message, 'Додано «Старлінк — Міні», KIT Невідомо')
-  assert.equal(client.state.rows[0].item_name, 'Старлінк — Міні, KIT Невідомо')
+  assert.equal(first.message, 'Додано «Старлінк — Міні», KIT Невідомо/Зафарбовано')
+  assert.equal(client.state.rows[0].item_name, 'Старлінк — Міні, KIT Невідомо/Зафарбовано')
   assert.equal(client.state.rows[0].serial, null)
   assert.equal(client.state.rows[0].variant, 'Міні')
   const second = await add(starlink({ kitNumbers: 'Невідомо' }), repo)
@@ -106,8 +108,8 @@ test('Старлінк: KIT «Невідомо» можна додавати к�
 test('Старлінк: «Зафарбовано» не конфліктує з реальним KIT, а реальний далі перевіряється', async () => {
   const { client, repo } = setup()
   assert.equal((await add(starlink({ kitNumbers: 'K-1' }), repo)).message, 'Додано «Старлінк — Міні», KIT K-1')
-  assert.equal((await add(starlink({ kitNumbers: 'Зафарбовано' }), repo)).message, 'Додано «Старлінк — Міні», KIT Зафарбовано')
-  assert.equal((await add(starlink({ variant: '3 версія', kitNumbers: 'Зафарбовано' }), repo)).message, 'Додано «Старлінк — 3 версія», KIT Зафарбовано')
+  assert.equal((await add(starlink({ kitNumbers: 'Зафарбовано' }), repo)).message, 'Додано «Старлінк — Міні», KIT Невідомо/Зафарбовано')
+  assert.equal((await add(starlink({ variant: '3 версія', kitNumbers: 'Зафарбовано' }), repo)).message, 'Додано «Старлінк — 3 версія», KIT Невідомо/Зафарбовано')
   assert.equal(client.state.rows.length, 3)
   assert.equal((await add(starlink({ variant: '2 версія', kitNumbers: 'k-1' }), repo)).message, `Такий KIT уже є: k-1 (${POS})`)
 })
@@ -115,7 +117,7 @@ test('Старлінк: «Зафарбовано» не конфліктує з 
 test('Старлінк: роутер додається і при новом рядку, і при злитті «Невідомо»', async () => {
   const { client, repo } = setup()
   const a = await add(starlink({ kitNumbers: 'Невідомо', extraQty: '1' }), repo)
-  assert.equal(a.message, 'Додано «Старлінк — Міні», KIT Невідомо і роутерів: 1')
+  assert.equal(a.message, 'Додано «Старлінк — Міні», KIT Невідомо/Зафарбовано і роутерів: 1')
   const b = await add(starlink({ kitNumbers: 'Невідомо', extraQty: '2' }), repo)
   assert.equal(b.message, 'Таке майно вже є: кількість збільшено, тепер 2 шт. + роутерів: 2')
   assert.equal(client.state.rows.find(x => x.item_name === 'Роутер Старлінк').quantity, 3)
@@ -132,10 +134,27 @@ test('Старлінк: редагування KIT між номером і по
   const toMark = await saveEdit(real, preset, { ...editFormFromItem(real), serial: 'Зафарбовано' }, ok, repo)
   assert.equal(toMark.message, 'Зміни збережено')
   const marked = client.state.rows.find(r => r.id === 1)
-  assert.equal(marked.item_name, 'Старлінк — Міні, KIT Зафарбовано')
+  assert.equal(marked.item_name, 'Старлінк — Міні, KIT Невідомо/Зафарбовано')
   assert.equal(marked.serial, null)
-  assert.equal(editFormFromItem(marked).serial, 'Зафарбовано')
+  assert.equal(editFormFromItem(marked).serial, 'Невідомо/Зафарбовано')
   const back = await saveEdit(marked, preset, { ...editFormFromItem(marked), serial: '7' }, ok, repo)
   assert.equal(back.message, 'Зміни збережено')
   assert.equal(client.state.rows.find(r => r.id === 1).serial, '7')
+})
+
+
+test('старі записи з окремими «Невідомо» / «Зафарбовано» розпізнаються і при редагуванні переходять на нову', async () => {
+  const legacy = { id: 1, position_name: POS, item_name: 'Рація — Motorola, S/N Зафарбовано', category: 'x', status: 'На позиції', quantity: 1, notes: '', variant: null, brand: 'Motorola', serial: null }
+  const { client, repo } = setup([legacy])
+  assert.equal(isPlaceholderSerial(itemParts(legacy).serial), true)
+  const form = editFormFromItem(legacy)
+  assert.equal(form.serial, 'Невідомо/Зафарбовано')
+  const r = await saveEdit(legacy, presetOf(legacy.item_name), form, { confirm: () => true }, repo)
+  assert.equal(r.message, 'Зміни збережено')
+  assert.equal(client.state.rows[0].item_name, 'Рація — Motorola, S/N Невідомо/Зафарбовано')
+  assert.equal(client.state.rows[0].serial, null)
+  // нове додавання зливається з цим рядком
+  const add2 = await add(radio({ serial: 'Невідомо/Зафарбовано' }), repo)
+  assert.match(add2.message, /тепер 2 шт\./)
+  assert.equal(client.state.rows.length, 1)
 })

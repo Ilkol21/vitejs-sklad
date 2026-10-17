@@ -16,7 +16,7 @@ export const editFormFromItem = item => {
   const form = {
     fullName: item.item_name,
     brand: p.brand,
-    serial: p.serial,
+    serial: normalizeSerial(p.serial),
     variant: p.detail,
     name: p.detail,
     model: p.detail,

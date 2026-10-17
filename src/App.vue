@@ -6,6 +6,7 @@ import { useUnitName } from './composables/useUnitName.js'
 import { useItems } from './composables/useItems.js'
 import { useEditForm } from './composables/useEditForm.js'
 import { useItemActions } from './composables/useItemActions.js'
+import { useStatusFilter } from './composables/useStatusFilter.js'
 import ToastMessage from './components/ToastMessage.vue'
 import PositionSelect from './components/PositionSelect.vue'
 import AddItemForm from './components/AddItemForm.vue'
@@ -17,8 +18,15 @@ const { toastMessage } = useToast()
 const { selectedPositionName, reportPosition, onPositionChanged } = usePosition()
 const { unitName, saveUnitName } = useUnitName()
 const { items, loadItems } = useItems(selectedPositionName)
+const { activeStatus, counts, visibleItems } = useStatusFilter(items)
 const { editForm, editingItem, editPreset, startEdit, cancelEdit, submitEdit } = useEditForm(items, loadItems)
 const { updateItemQty, updateItemStatus, deleteItem, downloadReport } = useItemActions(items, loadItems, { reportPosition, unitName })
+
+// Після додавання перемикач показує статус доданого рядка, щоб його було видно
+const onSaved = status => {
+  if (status) activeStatus.value = status
+  loadItems()
+}
 
 // Звіт за замовчуванням іде для відкритої позиції: на Зебрі кнопка Excel дає звіт Зебри
 watch(selectedPositionName, pos => {
@@ -45,10 +53,12 @@ watch(selectedPositionName, pos => {
     <PositionSelect v-model="selectedPositionName" />
 
     <div class="content-box">
-      <AddItemForm :position-name="selectedPositionName" @saved="loadItems" />
+      <AddItemForm :position-name="selectedPositionName" @saved="onSaved" />
 
       <ItemsTable
-        :items="items"
+        v-model:status="activeStatus"
+        :items="visibleItems"
+        :counts="counts"
         @update-qty="updateItemQty"
         @update-status="updateItemStatus"
         @edit="startEdit"

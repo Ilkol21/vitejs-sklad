@@ -1,10 +1,16 @@
-import { POSITIONS, STATUS } from '../config/app.js'
+import { POSITIONS, STATUS, STATUS_OPTIONS } from '../config/app.js'
 import { round2 } from '../utils/number.js'
 import { itemParts } from './itemName.js'
 import { presetOf, unitOf, isPresence, mergesModel } from './catalog.js'
 
 const positionIndex = name => {
   const i = POSITIONS.indexOf(name)
+  return i < 0 ? 999 : i
+}
+
+// Порядок статусів у звіті співпадає з перемикачем у застосунку: на позиції, потреба, на ремонт
+const statusIndex = status => {
+  const i = STATUS_OPTIONS.findIndex(o => o.value === status)
   return i < 0 ? 999 : i
 }
 
@@ -17,6 +23,7 @@ export const buildReportRows = list =>
     .map(item => ({ item, p: itemParts(item) }))
     .sort((a, b) =>
       positionIndex(a.item.position_name) - positionIndex(b.item.position_name) ||
+      statusIndex(a.item.status) - statusIndex(b.item.status) ||
       compareText(a.item.category, b.item.category) || compareText(a.p.base, b.p.base) ||
       compareText(a.p.detail, b.p.detail) || compareText(a.p.serial, b.p.serial) ||
       compareText(a.item.status, b.item.status))

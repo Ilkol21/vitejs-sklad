@@ -8,13 +8,13 @@ import SerialField from './SerialField.vue'
 const props = defineProps({
   positionName: { type: String, required: true }
 })
-// Після успішного додавання список майна треба перезавантажити
+// Після успішного додавання список майна треба перезавантажити; аргумент — статус доданого рядка
 const emit = defineEmits(['saved'])
 
 const {
   selectedPresetItem, status, quantity, notes, brand, serial, variant, deviceModel, callsign,
   customName, kitNumbers, lengthM, extraQty, currentPreset, onPresetChange, submit
-} = useAddForm(toRef(props, 'positionName'), () => emit('saved'))
+} = useAddForm(toRef(props, 'positionName'), () => emit('saved', status.value))
 </script>
 
 <template>

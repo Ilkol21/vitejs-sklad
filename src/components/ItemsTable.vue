@@ -2,19 +2,25 @@
 import { STATUS_OPTIONS } from '../config/app.js'
 import { isPresence, allowsDecimal, unitOf } from '../domain/catalog.js'
 import StatusOptions from './StatusOptions.vue'
+import StatusTabs from './StatusTabs.vue'
 
 defineProps({
-  items: { type: Array, required: true }
+  items: { type: Array, required: true },
+  counts: { type: Object, required: true }
 })
+
+// Вибраний статус: таблиця показує лише його рядки
+const status = defineModel('status', { type: String, required: true })
 
 defineEmits(['update-qty', 'update-status', 'edit', 'delete'])
 
-const statusClass = status => STATUS_OPTIONS.find(o => o.value === status)?.cssClass
+const statusClass = value => STATUS_OPTIONS.find(o => o.value === value)?.cssClass
 </script>
 
 <template>
   <div class="single-table-container">
     <h3>📋 Майно на обраній позиції</h3>
+    <StatusTabs v-model="status" :counts="counts" />
     <div class="table-wrap">
       <table class="styled-table">
         <thead>
@@ -50,7 +56,7 @@ const statusClass = status => STATUS_OPTIONS.find(o => o.value === status)?.cssC
             </td>
           </tr>
           <tr v-if="items.length === 0">
-            <td colspan="4" class="text-center text-gray-400 py-4">На цій позиції поки немає майна.</td>
+            <td colspan="4" class="text-center text-gray-400 py-4">На цій позиції поки немає майна зі статусом «{{ status }}».</td>
           </tr>
         </tbody>
       </table>

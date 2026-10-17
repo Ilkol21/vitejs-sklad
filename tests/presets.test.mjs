@@ -30,3 +30,8 @@ test('Лопасті: звичайне майно з вибором моделі
   assert.equal(p.presence, undefined)
   assert.deepEqual(p.variants, ['Mavic 4 Pro', 'Matrice', 'Outel'])
 })
+
+test('Зарядні хаби: «Для Mavic 3 серії» і «Для Outel»; у інших пунктах «Для 3 серії» лишилось', () => {
+  assert.deepEqual(variantsOf('Зарядні хаби'), ['Для Матріс', 'Для 4 Pro', 'Для Mavic 3 серії', 'Для Outel'])
+  for (const name of ['Пульти до дронів', 'Перехідники', 'Рупор']) assert.ok(variantsOf(name).includes('Для 3 серії'), name)
+})

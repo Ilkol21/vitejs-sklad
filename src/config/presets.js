@@ -17,7 +17,7 @@ export const PRESET_ITEMS = [
   { name: 'Камера спостереження', category: 'Зв\'язок' },
   { name: 'Антена', category: 'Зв\'язок', freeName: true },
   { name: 'Репітор', category: 'Зв\'язок' },
-  { name: 'Зарядні хаби', category: 'Живлення', variants: ['Для Матріс', 'Для 4 Pro', 'Для 3 серії'] },
+  { name: 'Зарядні хаби', category: 'Живлення', variants: ['Для Матріс', 'Для 4 Pro', 'Для Mavic 3 серії', 'Для Outel'] },
   { name: 'Спарки', category: 'Живлення', variants: ['Tulip', 'Для Аутель', 'До Матріс 5S', 'Звичайна 5S', 'Справа 4S'] },
   { name: 'Зарядка "5S"', category: 'Живлення' },
   { name: 'Кабель RG8', category: 'Зв\'язок', lengthM: true },

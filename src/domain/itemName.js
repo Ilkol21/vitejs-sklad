@@ -1,4 +1,5 @@
 import { NAME_SEPARATOR, MAX_CALLSIGN_LENGTH } from '../config/app.js'
+import { isPlaceholderSerial } from './serial.js'
 
 // Розбір назви запису:
 // «Рація — Motorola, S/N 123» -> назва / марка / серійний номер
@@ -19,7 +20,8 @@ export const parseItemName = full => {
 export const itemParts = item => {
   const parsed = parseItemName(item.item_name)
   if (!(item.variant || item.brand || item.serial)) return parsed
-  return { base: parsed.base, detail: item.variant || '', brand: item.brand || '', serial: item.serial || '' }
+  // serial порожній, а в назві є S/N: це позначка «Невідомо» / «Зафарбовано»
+  return { base: parsed.base, detail: item.variant || '', brand: item.brand || '', serial: item.serial || (isPlaceholderSerial(parsed.serial) ? parsed.serial : '') }
 }
 
 // Ім'я дрона: без лапок і зайвих пробілів; у назві записується в лапках

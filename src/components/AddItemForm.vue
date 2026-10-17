@@ -3,6 +3,7 @@ import { toRef } from 'vue'
 import { PRESET_ITEMS } from '../config/presets.js'
 import { useAddForm } from '../composables/useAddForm.js'
 import StatusOptions from './StatusOptions.vue'
+import SerialField from './SerialField.vue'
 
 const props = defineProps({
   positionName: { type: String, required: true }
@@ -27,7 +28,7 @@ const {
       <div v-if="currentPreset && currentPreset.needsSerial" class="serial-row">
         <input v-if="!currentPreset.noBrand" v-model="brand" :placeholder="(currentPreset.brandLabel || 'Марка') + ' *'" class="styled-input notes-input" />
         <input v-if="currentPreset.hasModel" v-model="deviceModel" placeholder="Модель *" class="styled-input notes-input" />
-        <input v-model="serial" placeholder="Серійний номер *" class="styled-input notes-input" />
+        <SerialField v-model="serial" placeholder="Серійний номер *" />
       </div>
 
       <select v-if="currentPreset && currentPreset.variants" v-model="variant" class="styled-select item-select">

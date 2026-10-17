@@ -1,6 +1,7 @@
 import { itemParts, splitCallsign, cleanCallsign, hasListSeparator, nameWithDetail, nameWithSerial, nameWithKit } from '../domain/itemName.js'
 import { presetOf } from '../domain/catalog.js'
 import { parseSegmentLength, parseSerialFields } from '../domain/validation.js'
+import { serialForColumn } from '../domain/serial.js'
 
 // Форма редагування: заповнення з запису і перетворення назад у нову назву та колонки.
 
@@ -48,7 +49,7 @@ export const buildEditedItem = (item, preset, f) => {
     const { brand, model, serial } = fields
     return {
       newName: nameWithSerial(preset, brand, model, serial),
-      cols: { variant: model || null, brand: brand || null, serial }
+      cols: { variant: model || null, brand: brand || null, serial: serialForColumn(serial) }
     }
   }
   if (preset && preset.variants) {

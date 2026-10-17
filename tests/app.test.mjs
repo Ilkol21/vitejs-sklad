@@ -18,3 +18,16 @@ test('App рендериться з усіма блоками', async () => {
   for (const p of PRESET_ITEMS) assert.ok(html.includes(`>${p.name.replace(/"/g, '&quot;')}</option>`) || html.includes(p.name.split('"')[0]), p.name)
   for (const pos of POSITIONS) assert.ok(html.includes(pos), pos)
 })
+
+test('поле серійного номера має випадний список з позначками', async () => {
+  const { default: SerialField } = await import('../src/components/SerialField.vue')
+  const render = value => renderToString(createSSRApp(SerialField, { modelValue: value, placeholder: 'Серійний номер *' }))
+  const manual = await render('AB-1')
+  assert.match(manual, /<option value>Ввести номер<\/option>/)
+  assert.match(manual, /<option value="Невідомо">Невідомо<\/option>/)
+  assert.match(manual, /<option value="Зафарбовано">Зафарбовано<\/option>/)
+  assert.doesNotMatch(manual, /<input disabled/)
+  assert.match(manual, /value="AB-1"/)
+  // при позначці поле вводу блокується
+  assert.match(await render('Зафарбовано'), /<input disabled/)
+})

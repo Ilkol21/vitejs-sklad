@@ -1,5 +1,6 @@
 <script setup>
 import { variantFieldLabel } from '../domain/catalog.js'
+import SerialField from './SerialField.vue'
 
 defineProps({
   item: { type: Object, required: true },
@@ -33,7 +34,7 @@ defineEmits(['save', 'cancel'])
         <label v-if="preset.hasModel" class="modal-label">Модель *</label>
         <input v-if="preset.hasModel" v-model="form.model" class="styled-input" />
         <label class="modal-label">Серійний номер *</label>
-        <input v-model="form.serial" class="styled-input" />
+        <SerialField v-model="form.serial" />
       </template>
 
       <template v-else-if="preset && preset.variants">

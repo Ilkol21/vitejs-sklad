@@ -2,6 +2,7 @@ import * as itemsRepository from '../api/itemsRepository.js'
 import { round2 } from '../utils/number.js'
 import { findPreset, allowsDecimal } from '../domain/catalog.js'
 import { cleanCallsign, nameWithDetail, nameWithSerial } from '../domain/itemName.js'
+import { isPlaceholderSerial, serialForColumn } from '../domain/serial.js'
 import { parseSegmentLength, parseSerialFields, validateQuantity } from '../domain/validation.js'
 import { addExtraItem, parseExtraQty } from './extraItemService.js'
 import { addKitItem } from './addKitService.js'
@@ -16,6 +17,16 @@ import { failure, insertErrorText } from './result.js'
 
 const checkError = error => failure('Помилка перевірки: ' + error.message)
 
+// Додаткова позиція (павук, роутер): текст для повідомлення і признак помилки
+const describeExtra = async (preset, count, form, ctx, repo) => {
+  if (!(count > 0)) return { text: '', failed: false }
+  const err = await addExtraItem({
+    preset, count, positionName: ctx.positionName, status: form.status, category: form.category
+  }, repo)
+  if (err) return { text: ` ${preset.extra.label} не додано: ${err}`, failed: true }
+  return { text: ` + ${preset.extra.plural}: ${count}`, failed: false }
+}
+
 export const addItem = async (form, ctx, repo = itemsRepository) => {
   if (!form.presetName) return {}
 
@@ -24,6 +35,8 @@ export const addItem = async (form, ctx, repo = itemsRepository) => {
   let qty = round2(form.quantity === '' || form.quantity === null ? NaN : form.quantity)
   let cols = {}
   let extraCount = 0
+  // «Невідомо» / «Зафарбовано»: не унікальний номер, тому однакові рядки зливаються кількістю
+  let placeholderSerial = false
 
   if (preset && preset.kit) return addKitItem(preset, form, ctx, repo)
 
@@ -37,15 +50,18 @@ export const addItem = async (form, ctx, repo = itemsRepository) => {
     const { brand, model, serial } = fields
     fullName = nameWithSerial(preset, brand, model, serial)
     qty = 1
-    cols = { brand: brand || null, variant: model || null, serial }
+    cols = { brand: brand || null, variant: model || null, serial: serialForColumn(serial) }
+    placeholderSerial = isPlaceholderSerial(serial)
 
     const extra = parseExtraQty(preset, form.extraQty)
     if (extra.error) return failure(extra.error)
     extraCount = extra.count
 
-    const { dup, error: dupErr } = await findSerialClash(preset, brand, serial, repo)
-    if (dupErr) return checkError(dupErr)
-    if (dup) return failure('Такий серійний номер уже є: ' + dup.position_name)
+    if (!placeholderSerial) {
+      const { dup, error: dupErr } = await findSerialClash(preset, brand, serial, repo)
+      if (dupErr) return checkError(dupErr)
+      if (dup) return failure('Такий серійний номер уже є: ' + dup.position_name)
+    }
   } else if (preset && preset.variants) {
     if (!form.variant) return failure(`Оберіть ${preset.variantLabel || 'вид'}`)
     let v = form.variant
@@ -77,12 +93,17 @@ export const addItem = async (form, ctx, repo = itemsRepository) => {
   if (qtyError) return failure(qtyError)
 
   // Таке саме майно на позиції з тим самим статусом не дублюємо: додаємо кількість до наявного рядка
-  if (!(preset && preset.needsSerial)) {
+  if (!(preset && preset.needsSerial) || placeholderSerial) {
     const { data: same, error: sameErr } = await repo.findSameRow({
       positionName: ctx.positionName, itemName: fullName, status: form.status, columns: 'id, quantity, notes'
     })
     if (sameErr) return checkError(sameErr)
-    if (same && same.length) return mergeIntoExisting(same[0], { preset, fullName, qty, notes: form.notes }, repo)
+    if (same && same.length) {
+      const merged = await mergeIntoExisting(same[0], { preset, fullName, qty, notes: form.notes }, repo)
+      if (merged.isError || !(extraCount > 0)) return merged
+      const extra = await describeExtra(preset, extraCount, form, ctx, repo)
+      return { ...merged, message: merged.message + extra.text, isError: extra.failed, formPatch: { ...merged.formPatch, serial: '', extraQty: '' } }
+    }
   }
 
   const { error } = await repo.insertItem({
@@ -99,18 +120,10 @@ export const addItem = async (form, ctx, repo = itemsRepository) => {
     return failure(insertErrorText(error))
   }
 
-  let extraMsg = ''
-  let extraFailed = false
-  if (extraCount > 0) {
-    const extraErr = await addExtraItem({
-      preset, count: extraCount, positionName: ctx.positionName, status: form.status, category: form.category
-    }, repo)
-    if (extraErr) { extraFailed = true; extraMsg = ` ${preset.extra.label} не додано: ${extraErr}` }
-    else extraMsg = ` + ${preset.extra.plural}: ${extraCount}`
-  }
+  const extra = await describeExtra(preset, extraCount, form, ctx, repo)
   return {
-    message: `Додано на позицію!${extraMsg}`,
-    isError: extraFailed,
+    message: `Додано на позицію!${extra.text}`,
+    isError: extra.failed,
     reload: true,
     formPatch: {
       notes: '', quantity: 1, serial: '', deviceModel: '', customName: '',

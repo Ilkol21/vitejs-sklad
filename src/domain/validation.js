@@ -1,6 +1,7 @@
 import { MAX_SEGMENT_LENGTH_M } from '../config/app.js'
 import { round2 } from '../utils/number.js'
 import { hasListSeparator } from './itemName.js'
+import { normalizeSerial } from './serial.js'
 
 // Перевірки полів форми. Кожна повертає { value } або { error }, щоб не змішувати перевірку з показом повідомлень.
 
@@ -17,7 +18,7 @@ export const parseSegmentLength = raw => {
 // listError — текст помилки, якщо введено кілька номерів
 export const parseSerialFields = (preset, fields, listError) => {
   const brand = preset.noBrand ? '' : String(fields.brand).trim()
-  const serial = String(fields.serial).trim()
+  const serial = normalizeSerial(fields.serial)
   const model = preset.hasModel ? String(fields.model || '').trim() : ''
   if (!preset.noBrand && !brand) return { error: preset.hasModel ? 'Вкажіть назву пристрою' : 'Вкажіть марку' }
   if (!serial) return { error: 'Вкажіть серійний номер' }

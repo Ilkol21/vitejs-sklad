@@ -61,3 +61,4 @@
 .app-container .report-select { width: 100%; }
 .app-container .excel-footer-box { background: #f8fafc; border: 1px solid #e2e8f0; padding: 14px; border-radius: 8px; }
 .app-container .text-center { text-align: center; }
+.app-container .serial-mode { flex: 0 0 auto; }

@@ -27,3 +27,8 @@ export const STORAGE_KEYS = {
 export const TOAST_DURATION_MS = 4000
 export const MAX_CALLSIGN_LENGTH = 40
 export const MAX_SEGMENT_LENGTH_M = 10000
+
+// Замість серійного номера можна вибрати одне із цих значень (номер невідомий або зафарбований).
+// Вони зберігаються лише в назві запису, а колонка serial лишається порожньою:
+// так унікальність серійних номерів у базі їх не зачіпає, а однакові рядки зливаються кількістю.
+export const SERIAL_PLACEHOLDERS = ['Невідомо', 'Зафарбовано']

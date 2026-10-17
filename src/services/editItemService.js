@@ -3,6 +3,9 @@ import { round2 } from '../utils/number.js'
 import { mergeNotes } from '../domain/notes.js'
 import { unitOf } from '../domain/catalog.js'
 import { itemParts } from '../domain/itemName.js'
+import { isPlaceholderSerial } from '../domain/serial.js'
+
+const SINGLE_SERIAL_ERROR = 'Серійний номер один: спершу зменшіть кількість до 1'
 import { buildEditedItem } from './editFormService.js'
 import { failure, success, nothing, insertErrorText } from './result.js'
 
@@ -26,7 +29,7 @@ const findCallsignClash = async (item, preset, detail, repo) => {
 const findSerialClash = async (item, preset, cols, repo) => {
   const { data, error } = await repo.fetchSameBase(preset.name, { withId: true })
   if (error) return { error }
-  const sn = cols.serial.toLowerCase()
+  const sn = (cols.serial || '').toLowerCase()
   const br = (cols.brand || '').toLowerCase()
   const clash = (data || []).find(r => {
     if (r.id === item.id) return false
@@ -71,7 +74,12 @@ export const saveEdit = async (item, preset, form, { confirm = window.confirm.bi
     if (clash) return failure(`Дрон з іменем «${built.callsignName}» уже є: ${clash.position_name}`)
   }
 
-  const hasSerial = preset && (preset.kit || preset.needsSerial)
+  // Унікальний номер / KIT; позначки «Невідомо» / «Зафарбовано» унікальними не є, тому зливаються
+  const hasSerial = preset && (preset.kit || (preset.needsSerial && !isPlaceholderSerial(form.serial)))
+  // Рядок «Невідомо» / «Зафарбовано» може мати кілька одиниць, а реальний номер має лише один запис
+  if (hasSerial && preset.needsSerial && Number(item.quantity) > 1 && isPlaceholderSerial(itemParts(item).serial)) {
+    return failure(SINGLE_SERIAL_ERROR)
+  }
   if (hasSerial) {
     const { clash, error } = await findSerialClash(item, preset, cols, repo)
     if (error) return checkError(error)

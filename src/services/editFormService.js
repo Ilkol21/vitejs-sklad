@@ -1,7 +1,7 @@
 import { itemParts, splitCallsign, cleanCallsign, hasListSeparator, nameWithDetail, nameWithSerial, nameWithKit } from '../domain/itemName.js'
 import { presetOf } from '../domain/catalog.js'
 import { parseSegmentLength, parseSerialFields } from '../domain/validation.js'
-import { serialForColumn } from '../domain/serial.js'
+import { normalizeSerial, serialForColumn } from '../domain/serial.js'
 
 // Форма редагування: заповнення з запису і перетворення назад у нову назву та колонки.
 
@@ -37,11 +37,11 @@ export const editFormFromItem = item => {
 export const buildEditedItem = (item, preset, f) => {
   if (preset && preset.kit) {
     const v = f.variant.trim()
-    const kit = f.serial.trim()
+    const kit = normalizeSerial(f.serial)
     if (!v) return { error: `Оберіть ${preset.variantLabel || 'вид'}` }
     if (!kit) return { error: 'Вкажіть номер KIT' }
     if (hasListSeparator(kit)) return { error: 'Вводьте один номер KIT' }
-    return { newName: nameWithKit(preset, v, kit), cols: { variant: v, brand: null, serial: kit } }
+    return { newName: nameWithKit(preset, v, kit), cols: { variant: v, brand: null, serial: serialForColumn(kit) } }
   }
   if (preset && preset.needsSerial) {
     const fields = parseSerialFields(preset, f, 'Вводьте один серійний номер без ком')

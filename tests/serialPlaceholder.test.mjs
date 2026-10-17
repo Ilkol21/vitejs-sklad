@@ -86,3 +86,56 @@ test('редагування: реальний номер → «Зафарбов
   const blocked = await saveEdit(many, preset, { ...editFormFromItem(many), serial: 'X1' }, { confirm: () => true }, repo)
   assert.equal(blocked.message, 'Серійний номер один: спершу зменшіть кількість до 1')
 })
+
+const starlink = (over = {}) => baseForm({ presetName: 'Старлінк', category: 'З\'язок', variant: 'Міні', ...over })
+
+test('Старлінк: KIT «Невідомо» можна додавати кілька разів, рядок не дублюється', async () => {
+  const { client, repo } = setup()
+  const first = await add(starlink({ kitNumbers: 'невідомо' }), repo)
+  assert.equal(first.message, 'Додано «Старлінк — Міні», KIT Невідомо')
+  assert.equal(client.state.rows[0].item_name, 'Старлінк — Міні, KIT Невідомо')
+  assert.equal(client.state.rows[0].serial, null)
+  assert.equal(client.state.rows[0].variant, 'Міні')
+  const second = await add(starlink({ kitNumbers: 'Невідомо' }), repo)
+  assert.equal(second.message, 'Таке майно вже є: кількість збільшено, тепер 2 шт.')
+  assert.equal(client.state.rows.length, 1)
+  assert.equal(client.state.rows[0].quantity, 2)
+  assert.deepEqual(second.formPatch, { notes: '', kitNumbers: '', extraQty: '' })
+})
+
+test('Старлінк: «Зафарбовано» не конфліктує з реальним KIT, а реальний далі перевіряється', async () => {
+  const { client, repo } = setup()
+  assert.equal((await add(starlink({ kitNumbers: 'K-1' }), repo)).message, 'Додано «Старлінк — Міні», KIT K-1')
+  assert.equal((await add(starlink({ kitNumbers: 'Зафарбовано' }), repo)).message, 'Додано «Старлінк — Міні», KIT Зафарбовано')
+  assert.equal((await add(starlink({ variant: '3 версія', kitNumbers: 'Зафарбовано' }), repo)).message, 'Додано «Старлінк — 3 версія», KIT Зафарбовано')
+  assert.equal(client.state.rows.length, 3)
+  assert.equal((await add(starlink({ variant: '2 версія', kitNumbers: 'k-1' }), repo)).message, `Такий KIT уже є: k-1 (${POS})`)
+})
+
+test('Старлінк: роутер додається і при новом рядку, і при злитті «Невідомо»', async () => {
+  const { client, repo } = setup()
+  const a = await add(starlink({ kitNumbers: 'Невідомо', extraQty: '1' }), repo)
+  assert.equal(a.message, 'Додано «Старлінк — Міні», KIT Невідомо і роутерів: 1')
+  const b = await add(starlink({ kitNumbers: 'Невідомо', extraQty: '2' }), repo)
+  assert.equal(b.message, 'Таке майно вже є: кількість збільшено, тепер 2 шт. + роутерів: 2')
+  assert.equal(client.state.rows.find(x => x.item_name === 'Роутер Старлінк').quantity, 3)
+})
+
+test('Старлінк: редагування KIT між номером і позначкою', async () => {
+  const mk = (id, serial, label, q = 1) => ({ id, position_name: POS, item_name: `Старлінк — Міні, KIT ${label}`, category: 'x', status: 'На позиції', quantity: q, notes: '', variant: 'Міні', brand: null, serial })
+  const real = mk(1, '9', '9')
+  const other = mk(2, '5', '5')
+  const { client, repo } = setup([real, other])
+  const preset = presetOf(real.item_name)
+  const ok = { confirm: () => true }
+  assert.equal((await saveEdit(real, preset, { ...editFormFromItem(real), serial: '5' }, ok, repo)).message, `Такий KIT уже є: ${POS}`)
+  const toMark = await saveEdit(real, preset, { ...editFormFromItem(real), serial: 'Зафарбовано' }, ok, repo)
+  assert.equal(toMark.message, 'Зміни збережено')
+  const marked = client.state.rows.find(r => r.id === 1)
+  assert.equal(marked.item_name, 'Старлінк — Міні, KIT Зафарбовано')
+  assert.equal(marked.serial, null)
+  assert.equal(editFormFromItem(marked).serial, 'Зафарбовано')
+  const back = await saveEdit(marked, preset, { ...editFormFromItem(marked), serial: '7' }, ok, repo)
+  assert.equal(back.message, 'Зміни збережено')
+  assert.equal(client.state.rows.find(r => r.id === 1).serial, '7')
+})

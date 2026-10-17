@@ -19,15 +19,13 @@ test('App рендериться з усіма блоками', async () => {
   for (const pos of POSITIONS) assert.ok(html.includes(pos), pos)
 })
 
-test('поле серійного номера має випадний список з позначками', async () => {
+test('серійний номер / KIT: одне поле зі стрілкою списку, без окремого селекта', async () => {
   const { default: SerialField } = await import('../src/components/SerialField.vue')
-  const render = value => renderToString(createSSRApp(SerialField, { modelValue: value, placeholder: 'Серійний номер *' }))
-  const manual = await render('AB-1')
-  assert.match(manual, /<option value>Ввести номер<\/option>/)
-  assert.match(manual, /<option value="Невідомо">Невідомо<\/option>/)
-  assert.match(manual, /<option value="Зафарбовано">Зафарбовано<\/option>/)
-  assert.doesNotMatch(manual, /<input disabled/)
-  assert.match(manual, /value="AB-1"/)
-  // при позначці поле вводу блокується
-  assert.match(await render('Зафарбовано'), /<input disabled/)
+  const html = await renderToString(createSSRApp(SerialField, { modelValue: 'AB-1', placeholder: 'Серійний номер *' }))
+  assert.equal((html.match(/<input/g) || []).length, 1)
+  assert.doesNotMatch(html, /<select/)
+  assert.match(html, /value="AB-1"/)
+  assert.match(html, /class="serial-toggle"/)
+  // список закритий, доки не натиснуто стрілку
+  assert.doesNotMatch(html, /serial-options/)
 })

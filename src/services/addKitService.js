@@ -1,30 +1,68 @@
 import { itemParts, nameWithKit, hasListSeparator } from '../domain/itemName.js'
+import { isPlaceholderSerial, normalizeSerial, serialForColumn } from '../domain/serial.js'
 import { addExtraItem, parseExtraQty } from './extraItemService.js'
+import { mergeIntoExisting } from './duplicateService.js'
 import { failure, insertErrorText } from './result.js'
 
-// Старлінк: версія + один номер KIT (кожен Старлінк додається окремо) + необов'язковий роутер
+const checkError = error => failure('Помилка перевірки: ' + error.message)
+
+// Номер KIT унікальний на всіх позиціях і версіях
+const findKitClash = async (preset, kit, repo) => {
+  const { data, error } = await repo.fetchSameBase(preset.name)
+  if (error) return { error }
+  return { taken: (data || []).find(row => itemParts(row).serial.toUpperCase() === kit.toUpperCase()) }
+}
+
+// Текст про роутер після додавання старлінка: { text, failed }
+const describeRouter = async (preset, count, form, ctx, repo, okText, failPrefix) => {
+  if (!(count > 0)) return { text: '', failed: false }
+  const err = await addExtraItem({
+    preset, count, positionName: ctx.positionName, status: form.status, category: form.category
+  }, repo)
+  if (err) return { text: `${failPrefix}${preset.extra.label} не додано: ${err}`, failed: true }
+  return { text: okText, failed: false }
+}
+
+// Старлінк: версія + один номер KIT (кожен Старлінк додається окремо) + необов'язковий роутер.
+// Замість номера можна вказати «Невідомо» / «Зафарбовано»: вони не унікальні, тому однакові рядки зливаються.
 export const addKitItem = async (preset, form, ctx, repo) => {
   if (!form.variant) return failure(`Оберіть ${preset.variantLabel || 'вид'}`)
 
-  const kit = form.kitNumbers.trim()
+  const kit = normalizeSerial(form.kitNumbers)
   if (!kit) return failure('Вкажіть номер KIT')
   if (hasListSeparator(kit)) return failure('Вводьте один номер KIT: кожен Старлінк додається окремо')
 
   const extra = parseExtraQty(preset, form.extraQty)
   if (extra.error) return failure(extra.error)
 
-  // Номер KIT унікальний на всіх позиціях і версіях
-  const { data: existing, error: exErr } = await repo.fetchSameBase(preset.name)
-  if (exErr) return failure('Помилка перевірки: ' + exErr.message)
-  const taken = (existing || []).find(row => itemParts(row).serial.toUpperCase() === kit.toUpperCase())
-  if (taken) return failure(`Такий KIT уже є: ${kit} (${taken.position_name})`)
+  const fullName = nameWithKit(preset, form.variant, kit)
+  const placeholder = isPlaceholderSerial(kit)
+  const done = { reload: true, formPatch: { notes: '', kitNumbers: '', extraQty: '' } }
+
+  if (placeholder) {
+    // Такий самий рядок на позиції з тим самим статусом не дублюємо: збільшуємо кількість
+    const { data: same, error: sameErr } = await repo.findSameRow({
+      positionName: ctx.positionName, itemName: fullName, status: form.status, columns: 'id, quantity, notes'
+    })
+    if (sameErr) return checkError(sameErr)
+    if (same && same.length) {
+      const merged = await mergeIntoExisting(same[0], { preset, fullName, qty: 1, notes: form.notes }, repo)
+      if (merged.isError) return merged
+      const router = await describeRouter(preset, extra.count, form, ctx, repo, ` + ${preset.extra.plural}: ${extra.count}`, ' ')
+      return { ...merged, ...done, message: merged.message + router.text, isError: router.failed }
+    }
+  } else {
+    const { taken, error: exErr } = await findKitClash(preset, kit, repo)
+    if (exErr) return checkError(exErr)
+    if (taken) return failure(`Такий KIT уже є: ${kit} (${taken.position_name})`)
+  }
 
   const { error } = await repo.insertItem({
     position_name: ctx.positionName,
     category: form.category,
-    item_name: nameWithKit(preset, form.variant, kit),
+    item_name: fullName,
     variant: form.variant,
-    serial: kit,
+    serial: serialForColumn(kit),
     status: form.status,
     quantity: 1,
     notes: form.notes
@@ -34,19 +72,10 @@ export const addKitItem = async (preset, form, ctx, repo) => {
     return failure(insertErrorText(error))
   }
 
-  let extraMsg = ''
-  let extraFailed = false
-  if (extra.count > 0) {
-    const extraErr = await addExtraItem({
-      preset, count: extra.count, positionName: ctx.positionName, status: form.status, category: form.category
-    }, repo)
-    if (extraErr) { extraFailed = true; extraMsg = `. ${preset.extra.label} не додано: ${extraErr}` }
-    else extraMsg = ` і ${preset.extra.plural}: ${extra.count}`
-  }
+  const router = await describeRouter(preset, extra.count, form, ctx, repo, ` і ${preset.extra.plural}: ${extra.count}`, '. ')
   return {
-    message: `Додано «${preset.name} — ${form.variant}», KIT ${kit}${extraMsg}`,
-    isError: extraFailed,
-    reload: true,
-    formPatch: { notes: '', kitNumbers: '', extraQty: '' }
+    ...done,
+    message: `Додано «${preset.name} — ${form.variant}», KIT ${kit}${router.text}`,
+    isError: router.failed
   }
 }

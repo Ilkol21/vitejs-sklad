@@ -42,7 +42,9 @@ const {
 
       <input v-if="currentPreset && currentPreset.lengthM" v-model="lengthM" type="number" min="0.1" step="0.1" placeholder="Довжина одного відрізка, м *" class="styled-input" />
 
-      <input v-if="currentPreset && currentPreset.kit" v-model="kitNumbers" placeholder="Номер KIT *" class="styled-input" />
+      <div v-if="currentPreset && currentPreset.kit" class="serial-row">
+        <SerialField v-model="kitNumbers" placeholder="Номер KIT *" />
+      </div>
 
       <div v-if="currentPreset && currentPreset.extra" class="router-row">
         <label class="router-label">{{ currentPreset.extra.label }} (необов'язково):</label>

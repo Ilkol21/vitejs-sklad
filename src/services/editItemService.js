@@ -75,9 +75,9 @@ export const saveEdit = async (item, preset, form, { confirm = window.confirm.bi
   }
 
   // Унікальний номер / KIT; позначки «Невідомо» / «Зафарбовано» унікальними не є, тому зливаються
-  const hasSerial = preset && (preset.kit || (preset.needsSerial && !isPlaceholderSerial(form.serial)))
+  const hasSerial = preset && (preset.kit || preset.needsSerial) && !isPlaceholderSerial(form.serial)
   // Рядок «Невідомо» / «Зафарбовано» може мати кілька одиниць, а реальний номер має лише один запис
-  if (hasSerial && preset.needsSerial && Number(item.quantity) > 1 && isPlaceholderSerial(itemParts(item).serial)) {
+  if (hasSerial && Number(item.quantity) > 1 && isPlaceholderSerial(itemParts(item).serial)) {
     return failure(SINGLE_SERIAL_ERROR)
   }
   if (hasSerial) {

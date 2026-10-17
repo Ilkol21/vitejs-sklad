@@ -45,7 +45,8 @@ export const nameWithSerial = (preset, brand, model, serial) =>
     ? `${preset.name}${NAME_SEPARATOR}S/N ${serial}`
     : `${preset.name}${NAME_SEPARATOR}${[brand, model].filter(Boolean).join(' ')}, S/N ${serial}`
 
-export const nameWithKit = (preset, variant, kit) => `${preset.name}${NAME_SEPARATOR}${variant}, KIT ${kit}`
+// Старлінк: «Старлінк — Міні, S/N KIT30000123» (префікс KIT входить у сам S/N). Старі записи «..., KIT 123» все ще розпізнаються.
+export const nameWithKit = (preset, variant, serial) => `${preset.name}${NAME_SEPARATOR}${variant}, S/N ${serial}`
 
 // Шаблон пошуку усіх записів одного найменування
 export const likePatternFor = baseName => `${baseName}${NAME_SEPARATOR}%`

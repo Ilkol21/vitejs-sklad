@@ -29,3 +29,22 @@ test('серійний номер / KIT: одне поле зі стрілкою
   // список закритий, доки не натиснуто стрілку
   assert.doesNotMatch(html, /serial-options/)
 })
+
+test('S/N Старлінка: у формі поле «S/N» зі стартовим «KIT»', async () => {
+  const html = await renderToString(createSSRApp(App))
+  // Перший пункт каталогу — Старлінк: поле має починатися з «KIT», підпис — «S/N *»
+  assert.match(html, /<input[^>]*placeholder="S\/N \*"[^>]*value="KIT"|<input[^>]*value="KIT"[^>]*placeholder="S\/N \*"/)
+  assert.doesNotMatch(html, /Номер KIT/)
+})
+
+test('вікно редагування Старлінка показує підпис «S/N» і номер з префіксом', async () => {
+  const { default: EditItemModal } = await import('../src/components/EditItemModal.vue')
+  const { presetOf } = await import('../src/domain/catalog.js')
+  const { editFormFromItem } = await import('../src/services/editFormService.js')
+  // Старий запис без префікса KIT у формі показується вже з ним
+  const item = { id: 1, position_name: 'Позиція «Зебра»', item_name: 'Старлінк — Міні, KIT 20000015486', quantity: 1, notes: '', variant: null, brand: null, serial: null }
+  const html = await renderToString(createSSRApp(EditItemModal, { item, preset: presetOf(item.item_name), form: editFormFromItem(item) }))
+  assert.match(html, /S\/N \*/)
+  assert.doesNotMatch(html, /Номер KIT/)
+  assert.match(html, /value="KIT20000015486"/)
+})

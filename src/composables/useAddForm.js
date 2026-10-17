@@ -18,7 +18,8 @@ export const useAddForm = (selectedPositionName, loadItems) => {
   const deviceModel = ref('')
   const callsign = ref('')
   const customName = ref('')
-  const kitNumbers = ref('')
+  // S/N Старлінка: поле завжди починається з префікса (KIT), щоб його не вводити вручну
+  const kitNumbers = ref(findPreset(PRESET_ITEMS[0].name)?.serialPrefix || '')
   const lengthM = ref('')
   const extraQty = ref('')
   // Комбінований облік (Лопасті): true = «просто є / немає» без кількості
@@ -46,7 +47,7 @@ export const useAddForm = (selectedPositionName, loadItems) => {
     customName.value = ''
     callsign.value = ''
     lengthM.value = ''
-    kitNumbers.value = ''
+    kitNumbers.value = preset?.serialPrefix || ''
     extraQty.value = ''
     noCount.value = false
     if (preset && (preset.needsSerial || preset.kit || preset.presence)) quantity.value = 1

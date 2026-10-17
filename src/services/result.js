@@ -16,7 +16,7 @@ export const nothing = () => ({})
 export const insertErrorText = error => {
   if (error.code === '23505') {
     return String(error.message).includes('serial')
-      ? 'Такий серійний номер / KIT уже є'
+      ? 'Такий серійний номер уже є'
       : 'Такий запис уже є, оновіть сторінку'
   }
   return 'Помилка бази: ' + error.message

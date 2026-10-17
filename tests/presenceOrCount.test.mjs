@@ -128,3 +128,19 @@ test('текст кількості та прапорець рядка', () => {
   assert.equal(qtyText('Лопасті — Matrice', 3, false), '3 шт.')
   assert.equal(qtyText('Світло', 0), 'немає')
 })
+
+test('Excel: S/N Старлінка показується з префіксом KIT, інші серійні номери без змін, позначка лишається', () => {
+  const base = { position_name: POS, category: 'x', status: 'На позиції', quantity: 1, notes: '', brand: null }
+  const rows = buildReportRows([
+    { ...base, id: 1, item_name: 'Старлінк — Міні, KIT 20000015486', variant: null, serial: null },
+    { ...base, id: 2, item_name: 'Старлінк — Міні, S/N KIT777', variant: 'Міні', serial: 'KIT777' },
+    { ...base, id: 3, item_name: 'Старлінк — Міні, S/N Невідомо/Зафарбовано', variant: 'Міні', serial: null },
+    { ...base, id: 4, item_name: 'Рація — Motorola, S/N 123', variant: null, brand: 'Motorola', serial: '123' }
+  ])
+  const bySerial = rows.map(r => r['Серійний номер'])
+  assert.ok(bySerial.includes('KIT20000015486'))
+  assert.ok(bySerial.includes('KIT777'))
+  assert.ok(bySerial.includes('Невідомо/Зафарбовано'))
+  assert.ok(bySerial.includes('123'))
+  assert.equal(Object.keys(rows[0]).includes('Серійний номер / KIT'), false)
+})

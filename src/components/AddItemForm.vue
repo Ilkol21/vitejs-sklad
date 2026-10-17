@@ -43,7 +43,7 @@ const {
       <input v-if="currentPreset && currentPreset.lengthM" v-model="lengthM" type="number" min="0.1" step="0.1" placeholder="Довжина одного відрізка, м *" class="styled-input" />
 
       <div v-if="currentPreset && currentPreset.kit" class="serial-row">
-        <SerialField v-model="kitNumbers" placeholder="Номер KIT *" />
+        <SerialField v-model="kitNumbers" :prefix="currentPreset.serialPrefix" placeholder="S/N *" />
       </div>
 
       <div v-if="currentPreset && currentPreset.extra" class="router-row">

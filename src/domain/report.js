@@ -1,7 +1,7 @@
 import { POSITIONS, STATUS, STATUS_OPTIONS } from '../config/app.js'
 import { round2 } from '../utils/number.js'
 import { itemParts } from './itemName.js'
-import { presetOf, unitOf, isPresenceRow, mergesModel } from './catalog.js'
+import { presetOf, unitOf, isPresenceRow, mergesModel, displaySerial } from './catalog.js'
 
 const positionIndex = name => {
   const i = POSITIONS.indexOf(name)
@@ -33,7 +33,7 @@ export const buildReportRows = list =>
       'Найменування': p.base,
       'Вид / модель / назва': mergesModel(p.base) ? '' : p.detail,
       'Марка': mergesModel(p.base) ? [p.brand, p.detail].filter(Boolean).join(' ') : p.brand,
-      'Серійний номер / KIT': p.serial,
+      'Серійний номер': displaySerial(p.base, p.serial),
       'Статус': item.status,
       'Кількість': isPresenceRow(item) ? '' : Number(item.quantity),
       'Од.': isPresenceRow(item) ? '' : unitOf(item.item_name),

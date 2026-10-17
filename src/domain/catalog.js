@@ -1,4 +1,5 @@
 import { PRESET_ITEMS } from '../config/presets.js'
+import { withSerialPrefix } from './serial.js'
 import { DEFAULT_MEASURE_UNIT, NAME_SEPARATOR } from '../config/app.js'
 
 // Пункт каталогу за назвою: «Дрони»
@@ -53,3 +54,10 @@ export const mergesModel = base => {
 // Підпис поля «вид»: «версію» -> «Версію», без підпису -> «Вид»
 export const variantFieldLabel = preset =>
   preset.variantLabel ? preset.variantLabel.charAt(0).toUpperCase() + preset.variantLabel.slice(1) : 'Вид'
+
+
+// S/N для показу у звіті: у пунктів з префіксом (Старлінк → KIT) номер завжди з ним, так само як у старих записах без префікса
+export const displaySerial = (base, serial) => {
+  const p = findPreset(base)
+  return p && p.serialPrefix && serial ? withSerialPrefix(serial, p.serialPrefix) : serial
+}

@@ -3,7 +3,7 @@ import { mergeNotes } from '../domain/notes.js'
 import { qtyText, quantityColumns } from '../domain/catalog.js'
 import { mergeRowQuantities } from '../domain/quantity.js'
 import { itemParts } from '../domain/itemName.js'
-import { isPlaceholderSerial } from '../domain/serial.js'
+import { isPlaceholderSerial, sameSerial } from '../domain/serial.js'
 
 const SINGLE_SERIAL_ERROR = 'Серійний номер один: спершу зменшіть кількість до 1'
 import { buildEditedItem } from './editFormService.js'
@@ -25,16 +25,16 @@ const findCallsignClash = async (item, preset, detail, repo) => {
   return { clash }
 }
 
-// Серійний номер / KIT унікальний на всіх позиціях
+// Серійний номер (у Старлінка з префіксом KIT) унікальний на всіх позиціях
 const findSerialClash = async (item, preset, cols, repo) => {
   const { data, error } = await repo.fetchSameBase(preset.name, { withId: true })
   if (error) return { error }
-  const sn = (cols.serial || '').toLowerCase()
+  const sn = cols.serial || ''
   const br = (cols.brand || '').toLowerCase()
   const clash = (data || []).find(r => {
     if (r.id === item.id) return false
     const p = itemParts(r)
-    return p.serial.toLowerCase() === sn && (preset.kit || p.brand.toLowerCase() === br)
+    return sameSerial(p.serial, sn, preset.serialPrefix) && (preset.kit || p.brand.toLowerCase() === br)
   })
   return { clash }
 }
@@ -86,7 +86,7 @@ export const saveEdit = async (item, preset, form, { confirm = window.confirm.bi
   if (hasSerial) {
     const { clash, error } = await findSerialClash(item, preset, cols, repo)
     if (error) return checkError(error)
-    if (clash) return failure(`Такий ${preset.kit ? 'KIT' : 'серійний номер'} уже є: ${clash.position_name}`)
+    if (clash) return failure(`Такий ${preset.kit ? 'S/N' : 'серійний номер'} уже є: ${clash.position_name}`)
   }
 
   if (newName !== item.item_name && !hasSerial) {

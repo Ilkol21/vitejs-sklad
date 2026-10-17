@@ -24,8 +24,8 @@ defineEmits(['save', 'cancel'])
           <option v-if="form.variant && !preset.variants.includes(form.variant)" :value="form.variant">{{ form.variant }} (немає в списку)</option>
           <option v-for="m in preset.variants" :key="m" :value="m">{{ m }}</option>
         </select>
-        <label class="modal-label">Номер KIT *</label>
-        <SerialField v-model="form.serial" />
+        <label class="modal-label">S/N *</label>
+        <SerialField v-model="form.serial" :prefix="preset.serialPrefix" />
       </template>
 
       <template v-else-if="preset && preset.needsSerial">

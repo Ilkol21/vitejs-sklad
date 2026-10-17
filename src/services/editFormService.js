@@ -1,7 +1,7 @@
 import { itemParts, splitCallsign, cleanCallsign, hasListSeparator, nameWithDetail, nameWithSerial, nameWithKit } from '../domain/itemName.js'
 import { presetOf } from '../domain/catalog.js'
 import { parseSegmentLength, parseSerialFields } from '../domain/validation.js'
-import { normalizeSerial, serialForColumn } from '../domain/serial.js'
+import { normalizeSerial, withSerialPrefix, serialForColumn } from '../domain/serial.js'
 
 // Форма редагування: заповнення з запису і перетворення назад у нову назву та колонки.
 
@@ -16,7 +16,8 @@ export const editFormFromItem = item => {
   const form = {
     fullName: item.item_name,
     brand: p.brand,
-    serial: normalizeSerial(p.serial),
+    // Старі записи Старлінка були без префікса KIT: у формі вони показуються вже з ним
+    serial: preset && preset.serialPrefix ? withSerialPrefix(p.serial, preset.serialPrefix) : normalizeSerial(p.serial),
     variant: p.detail,
     name: p.detail,
     model: p.detail,
@@ -48,10 +49,10 @@ const noCountCols = (item, f) => {
 export const buildEditedItem = (item, preset, f) => {
   if (preset && preset.kit) {
     const v = f.variant.trim()
-    const kit = normalizeSerial(f.serial)
+    const kit = withSerialPrefix(f.serial, preset.serialPrefix)
     if (!v) return { error: `Оберіть ${preset.variantLabel || 'вид'}` }
-    if (!kit) return { error: 'Вкажіть номер KIT' }
-    if (hasListSeparator(kit)) return { error: 'Вводьте один номер KIT' }
+    if (!kit) return { error: 'Вкажіть S/N' }
+    if (hasListSeparator(kit)) return { error: 'Вводьте один S/N' }
     return { newName: nameWithKit(preset, v, kit), cols: { variant: v, brand: null, serial: serialForColumn(kit) } }
   }
   if (preset && preset.needsSerial) {

@@ -1,7 +1,7 @@
 import { POSITIONS, STATUS, STATUS_OPTIONS } from '../config/app.js'
 import { round2 } from '../utils/number.js'
 import { itemParts } from './itemName.js'
-import { groupDroneRows } from './droneGroups.js'
+import { groupItemRows, serialsText } from './serialGroups.js'
 import { presetOf, unitOf, isPresenceRow, mergesModel, displaySerial } from './catalog.js'
 
 const positionIndex = name => {
@@ -47,19 +47,35 @@ const droneGroupRow = group => {
   }
 }
 
-// Рядки звіту: дрони однієї моделі (на кожній позиції й статусі), у яких є іменні, зводяться в один рядок
+// Рядок звіту для однакового майна з кількома серійними номерами: кількість разом, номери через кому
+const serialGroupRow = group => ({
+  ...reportRow({ ...group.items[0], quantity: group.total, notes: group.notes }, itemParts(group.items[0])),
+  'Серійний номер': serialsText(group)
+})
+
+// Рядки звіту: дрони однієї моделі (на кожній позиції й статусі), у яких є іменні, зводяться в один рядок;
+// так само однакове майно з різними серійними номерами
 export const buildReportRows = list =>
-  groupDroneRows(list, { byPosition: true })
-    .map(entry => (entry.type === 'drones'
-      ? { item: entry.items[0], p: { ...itemParts(entry.items[0]), detail: entry.model, serial: '' }, entry }
-      : { item: entry.item, p: itemParts(entry.item), entry: null }))
+  groupItemRows(list, { byPosition: true })
+    .map(entry => {
+      if (entry.type === 'drones') {
+        return { item: entry.items[0], p: { ...itemParts(entry.items[0]), detail: entry.model, serial: '' }, entry }
+      }
+      if (entry.type === 'serials') {
+        return { item: entry.items[0], p: { ...itemParts(entry.items[0]), serial: entry.serials[0] }, entry }
+      }
+      return { item: entry.item, p: itemParts(entry.item), entry: null }
+    })
     .sort((a, b) =>
       positionIndex(a.item.position_name) - positionIndex(b.item.position_name) ||
       statusIndex(a.item.status) - statusIndex(b.item.status) ||
       compareText(a.item.category, b.item.category) || compareText(a.p.base, b.p.base) ||
       compareText(a.p.detail, b.p.detail) || compareText(a.p.serial, b.p.serial) ||
       compareText(a.item.status, b.item.status))
-    .map(({ item, p, entry }) => (entry ? droneGroupRow(entry) : reportRow(item, p)))
+    .map(({ item, p, entry }) => {
+      if (!entry) return reportRow(item, p)
+      return entry.type === 'drones' ? droneGroupRow(entry) : serialGroupRow(entry)
+    })
 
 // Підсумок: однакове майно рахується разом (KIT і серійні номери не розділяють групу).
 // «Разом є» = На позиції + На ремонт (це майно, яке є); «Потреба» окремо, бо це не наявність.

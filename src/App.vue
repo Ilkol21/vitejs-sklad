@@ -14,6 +14,7 @@ import AddItemForm from './components/AddItemForm.vue'
 import ItemsTable from './components/ItemsTable.vue'
 import EditItemModal from './components/EditItemModal.vue'
 import DroneGroupModal from './components/DroneGroupModal.vue'
+import SerialGroupModal from './components/SerialGroupModal.vue'
 import ReportFooter from './components/ReportFooter.vue'
 
 const { toastMessage } = useToast()
@@ -51,7 +52,8 @@ watch(selectedPositionName, pos => {
       @cancel="cancelEdit"
     />
 
-    <DroneGroupModal
+    <component
+      :is="group.type === 'serials' ? SerialGroupModal : DroneGroupModal"
       v-if="group && !editingItem"
       :group="group"
       @close="closeGroup"

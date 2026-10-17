@@ -2,7 +2,7 @@
 import { STATUS_OPTIONS } from '../config/app.js'
 import { computed } from 'vue'
 import { isPresenceRow, allowsDecimal, unitOf } from '../domain/catalog.js'
-import { groupDroneRows } from '../domain/droneGroups.js'
+import { groupItemRows, serialsText } from '../domain/serialGroups.js'
 import StatusOptions from './StatusOptions.vue'
 import StatusTabs from './StatusTabs.vue'
 
@@ -16,8 +16,9 @@ const status = defineModel('status', { type: String, required: true })
 
 defineEmits(['update-qty', 'update-status', 'edit', 'delete', 'open-group'])
 
-// Дрони однієї моделі, у яких є іменні, показуються одним рядком з загальною кількістю
-const entries = computed(() => groupDroneRows(props.items))
+// Дрони однієї моделі, у яких є іменні, і однакове майно з різними серійними номерами
+// показуються одним рядком з загальною кількістю
+const entries = computed(() => groupItemRows(props.items))
 
 const statusClass = value => STATUS_OPTIONS.find(o => o.value === value)?.cssClass
 </script>
@@ -48,6 +49,21 @@ const statusClass = value => STATUS_OPTIONS.find(o => o.value === value)?.cssCla
             <td class="td-qty"><b>{{ entry.total }}</b><div class="qty-unit">шт.</div></td>
             <td class="td-action">
               <button @click="$emit('open-group', entry)" class="edit-btn" title="Керування дронами">✎</button>
+            </td>
+          </tr>
+          <tr v-else-if="entry.type === 'serials'" class="group-row">
+            <td>
+              <b>{{ entry.title }}</b>
+              <div class="group-names">S/N: {{ serialsText(entry) }}</div>
+              <small class="item-meta">[{{ entry.category }}] {{ entry.notes }}</small>
+            </td>
+            <td class="td-status"><span class="group-status" :class="statusClass(entry.status)">{{ entry.status }}</span></td>
+            <td class="td-qty">
+              <b v-if="entry.presence">{{ entry.total > 0 ? 'Є' : 'Немає' }}</b>
+              <template v-else><b>{{ entry.total }}</b><div class="qty-unit">{{ unitOf(entry.items[0].item_name) }}</div></template>
+            </td>
+            <td class="td-action">
+              <button @click="$emit('open-group', entry)" class="edit-btn" title="Керування номерами">✎</button>
             </td>
           </tr>
           <tr v-else-if="entry.type === 'row'">

@@ -137,10 +137,26 @@ test('Excel: S/N Старлінка показується з префіксом
     { ...base, id: 3, item_name: 'Старлінк — Міні, S/N Невідомо/Зафарбовано', variant: 'Міні', serial: null },
     { ...base, id: 4, item_name: 'Рація — Motorola, S/N 123', variant: null, brand: 'Motorola', serial: '123' }
   ])
-  const bySerial = rows.map(r => r['Серійний номер'])
-  assert.ok(bySerial.includes('KIT20000015486'))
-  assert.ok(bySerial.includes('KIT777'))
-  assert.ok(bySerial.includes('Невідомо/Зафарбовано'))
-  assert.ok(bySerial.includes('123'))
+  // Три Міні на одній позиції зведені в один рядок: S/N через кому, кількість разом
+  const mini = rows.find(r => r['Вид / модель / назва'] === 'Міні')
+  assert.deepEqual(mini['Серійний номер'].split(', ').sort(), ['KIT20000015486', 'KIT777', 'Невідомо/Зафарбовано'].sort())
+  assert.equal(mini['Кількість'], 3)
+  assert.equal(rows.find(r => r['Найменування'] === 'Рація')['Серійний номер'], '123')
   assert.equal(Object.keys(rows[0]).includes('Серійний номер / KIT'), false)
+})
+
+test('Excel: однакове майно з різними S/N — один рядок із загальною кількістю й номерами через кому', () => {
+  const base = { position_name: POS, category: 'Зв’язок', status: 'На позиції', quantity: 1, notes: '', variant: null, brand: 'Motorola', no_count: false }
+  const rows = buildReportRows([
+    { ...base, id: 1, item_name: 'Рація — Motorola, S/N 123', serial: '123' },
+    { ...base, id: 2, item_name: 'Рація — Motorola, S/N 456', serial: '456' },
+    { ...base, id: 3, item_name: 'Рація — Motorola, S/N 789', serial: '789', status: 'На ремонт' },
+    { ...base, id: 4, item_name: 'Рація — Baofeng, S/N 1', serial: '1', brand: 'Baofeng' }
+  ])
+  assert.equal(rows.length, 3)
+  const moto = rows.find(r => r['Статус'] === 'На позиції' && r['Марка'] === 'Motorola')
+  assert.equal(moto['Кількість'], 2)
+  assert.equal(moto['Серійний номер'], '123, 456')
+  assert.equal(rows.find(r => r['Марка'] === 'Baofeng')['Серійний номер'], '1')
+  assert.equal(rows.find(r => r['Статус'] === 'На ремонт')['Серійний номер'], '789')
 })

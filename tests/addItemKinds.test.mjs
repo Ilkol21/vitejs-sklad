@@ -49,3 +49,15 @@ test('помилки бази повертаються з тими самими 
   s = setup([], { failOn: { op: 'select', error: { message: 'down' } } })
   assert.equal((await add(baseForm(), s.repo)).message, 'Помилка перевірки: down')
 })
+
+test('лопасті: модель необхідна, кількість рахується штуками, однакова модель зливається', async () => {
+  const { client, repo } = setup()
+  const form = baseForm({ presetName: 'Лопасті', category: 'БПЛА', variant: 'Matrice', quantity: 4 })
+  assert.equal((await add({ ...form, variant: '' }, repo)).message, 'Оберіть модель')
+  assert.equal((await add(form, repo)).message, 'Додано на позицію!')
+  assert.equal(client.state.rows[0].item_name, 'Лопасті — Matrice')
+  assert.equal(client.state.rows[0].quantity, 4)
+  assert.equal((await add({ ...form, quantity: 2 }, repo)).message, 'Таке майно вже є: кількість збільшено, тепер 6 шт.')
+  assert.equal((await add({ ...form, variant: 'Outel', quantity: 1 }, repo)).message, 'Додано на позицію!')
+  assert.equal(client.state.rows.length, 2)
+})

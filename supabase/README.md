@@ -44,6 +44,13 @@ select vault.create_secret('CHAT_ID', 'telegram_chat_id');
 🕒 15.10.2026 12:30
 ```
 
+## Майно без кількості («просто є»)
+Для «Лопастей» можна вказати або кількість, або просто «Є / Немає». Для цього в таблиці є колонка `no_count`.
+Виконати в SQL Editor в такому порядку (спочатку колонка, потім тригер, бо тригер читає цю колонку):
+
+1. [`no_count.sql`](./no_count.sql)
+2. [`telegram_notifications.sql`](./telegram_notifications.sql) (повторно, щоб оновити тригер)
+
 ## Діагностика
 - Нічого не приходить: перевірити, що секрети створені
   `select name from vault.decrypted_secrets;` і що боту писали `/start`.

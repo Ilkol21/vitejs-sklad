@@ -1,6 +1,6 @@
 import * as itemsRepository from '../api/itemsRepository.js'
 import { round2 } from '../utils/number.js'
-import { findPreset, allowsDecimal } from '../domain/catalog.js'
+import { findPreset, allowsDecimal, quantityColumns } from '../domain/catalog.js'
 import { cleanCallsign, nameWithDetail, nameWithSerial } from '../domain/itemName.js'
 import { isPlaceholderSerial, serialForColumn } from '../domain/serial.js'
 import { parseSegmentLength, parseSerialFields, validateQuantity } from '../domain/validation.js'
@@ -39,6 +39,9 @@ export const addItem = async (form, ctx, repo = itemsRepository) => {
   let placeholderSerial = false
 
   if (preset && preset.kit) return addKitItem(preset, form, ctx, repo)
+
+  // Комбінований облік (Лопасті): рядок «просто є / немає» без кількості (колонка no_count) або зі штуками
+  const noCount = !!(preset && preset.presenceOrCount && form.noCount)
 
   if (preset && preset.needsSerial) {
     const fields = parseSerialFields(
@@ -89,17 +92,22 @@ export const addItem = async (form, ctx, repo = itemsRepository) => {
     cols = { variant: `${len.value} м` }
   }
 
+  if (noCount) {
+    qty = Number(form.quantity) > 0 ? 1 : 0
+    cols = { ...cols, no_count: true }
+  }
+
   const qtyError = validateQuantity(qty, allowsDecimal(fullName))
   if (qtyError) return failure(qtyError)
 
   // Таке саме майно на позиції з тим самим статусом не дублюємо: додаємо кількість до наявного рядка
   if (!(preset && preset.needsSerial) || placeholderSerial) {
     const { data: same, error: sameErr } = await repo.findSameRow({
-      positionName: ctx.positionName, itemName: fullName, status: form.status, columns: 'id, quantity, notes'
+      positionName: ctx.positionName, itemName: fullName, status: form.status, columns: quantityColumns(fullName, 'id, quantity, notes')
     })
     if (sameErr) return checkError(sameErr)
     if (same && same.length) {
-      const merged = await mergeIntoExisting(same[0], { preset, fullName, qty, notes: form.notes }, repo)
+      const merged = await mergeIntoExisting(same[0], { preset, fullName, qty, notes: form.notes, noCount }, repo)
       if (merged.isError || !(extraCount > 0)) return merged
       const extra = await describeExtra(preset, extraCount, form, ctx, repo)
       return { ...merged, message: merged.message + extra.text, isError: extra.failed, formPatch: { ...merged.formPatch, serial: '', extraQty: '' } }

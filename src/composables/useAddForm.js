@@ -21,12 +21,17 @@ export const useAddForm = (selectedPositionName, loadItems) => {
   const kitNumbers = ref('')
   const lengthM = ref('')
   const extraQty = ref('')
+  // Комбінований облік (Лопасті): true = «просто є / немає» без кількості
+  const noCount = ref(false)
 
   const fields = {
-    quantity, notes, brand, serial, variant, deviceModel, callsign, customName, kitNumbers, lengthM, extraQty
+    quantity, noCount, notes, brand, serial, variant, deviceModel, callsign, customName, kitNumbers, lengthM, extraQty
   }
 
   const currentPreset = computed(() => findPreset(selectedPresetItem.value))
+
+  // Перехід у режим «просто є»: значення беремо 1 (є) або 0 (немає)
+  watch(noCount, on => { if (on) quantity.value = Number(quantity.value) > 0 ? 1 : 0 })
 
   // Дрон з іменем завжди в одному екземплярі
   watch(callsign, v => { if (String(v || '').trim()) quantity.value = 1 })
@@ -43,6 +48,7 @@ export const useAddForm = (selectedPositionName, loadItems) => {
     lengthM.value = ''
     kitNumbers.value = ''
     extraQty.value = ''
+    noCount.value = false
     if (preset && (preset.needsSerial || preset.kit || preset.presence)) quantity.value = 1
   }
 
@@ -52,6 +58,7 @@ export const useAddForm = (selectedPositionName, loadItems) => {
       status: status.value,
       category: category.value,
       quantity: quantity.value,
+      noCount: noCount.value,
       notes: notes.value,
       brand: brand.value,
       serial: serial.value,
@@ -70,7 +77,7 @@ export const useAddForm = (selectedPositionName, loadItems) => {
   }
 
   return {
-    selectedPresetItem, category, status, quantity, notes, brand, serial, variant, deviceModel,
+    selectedPresetItem, category, status, quantity, noCount, notes, brand, serial, variant, deviceModel,
     callsign, customName, kitNumbers, lengthM, extraQty, currentPreset, onPresetChange, submit
   }
 }

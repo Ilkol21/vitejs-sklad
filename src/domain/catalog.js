@@ -23,9 +23,26 @@ export const isPresence = name => {
   return !!(p && p.presence)
 }
 
-// Кількість для тексту: для «Є / Немає» слово, для решти число з одиницею
-export const qtyText = (name, q) =>
-  isPresence(name) ? (Number(q) > 0 ? 'є' : 'немає') : `${q} ${unitOf(name)}`
+// Пункт, який можна вести і як «Є / Немає», і з кількістю: режим обирається для кожного рядка
+export const isPresenceOrCount = name => {
+  const p = presetOf(name)
+  return !!(p && p.presenceOrCount)
+}
+
+// Чи рядок обліковується як «Є / Немає» (без кількості): за пунктом каталогу або за прапорцем no_count у рядка
+export const isPresenceRow = item =>
+  isPresence(item.item_name) || (isPresenceOrCount(item.item_name) && !!item.no_count)
+
+// Колонки для запиту рядка-кандидата на зливання: колонку no_count запитуємо лише для пунктів з комбінованим обліком,
+// щоб робота решти майна не залежала від того, чи вже додана ця колонка в базі
+export const quantityColumns = (name, columns) => (isPresenceOrCount(name) ? `${columns}, no_count` : columns)
+
+// Кількість для тексту: для «Є / Немає» слово, для решти число з одиницею.
+// noCount — прапорець рядка «без кількості» для пунктів з комбінованим обліком
+export const qtyText = (name, q, noCount = false) =>
+  isPresence(name) || (noCount && isPresenceOrCount(name))
+    ? (Number(q) > 0 ? 'є' : 'немає')
+    : `${q} ${unitOf(name)}`
 
 // Для планшетів назва пристрою й модель йдуть в одну колонку «Марка» у звіті
 export const mergesModel = base => {

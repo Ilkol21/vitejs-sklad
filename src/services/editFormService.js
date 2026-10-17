@@ -6,7 +6,7 @@ import { normalizeSerial, serialForColumn } from '../domain/serial.js'
 // Форма редагування: заповнення з запису і перетворення назад у нову назву та колонки.
 
 export const emptyEditForm = () => ({
-  fullName: '', brand: '', serial: '', variant: '', name: '', model: '', callsign: '', length: '', notes: ''
+  fullName: '', brand: '', serial: '', variant: '', name: '', model: '', callsign: '', length: '', notes: '', noCount: false
 })
 
 // Запис -> поля форми
@@ -22,7 +22,8 @@ export const editFormFromItem = item => {
     model: p.detail,
     length: preset && preset.lengthM ? String(parseFloat(p.detail) || '') : '',
     callsign: '',
-    notes: item.notes || ''
+    notes: item.notes || '',
+    noCount: !!item.no_count
   }
   if (preset && preset.callsign) {
     const parts = splitCallsign(p.detail)
@@ -30,6 +31,16 @@ export const editFormFromItem = item => {
     form.callsign = parts.name
   }
   return form
+}
+
+// Комбінований облік (Лопасті): «просто є» зберігається в колонці no_count, а кількість стає 1 або 0.
+// Колонку надсилаємо лише коли режим змінився, щоб звичайне редагування не залежало від наявності колонки
+const noCountCols = (item, f) => {
+  const next = !!f.noCount
+  if (next === !!item.no_count) return {}
+  const cols = { no_count: next }
+  if (next) cols.quantity = Number(item.quantity) > 0 ? 1 : 0
+  return cols
 }
 
 // Поля форми -> { newName, cols } або { error }.
@@ -54,6 +65,10 @@ export const buildEditedItem = (item, preset, f) => {
   }
   if (preset && preset.variants) {
     const v = f.variant.trim()
+    // Старий рядок без моделі («Лопасті» з «Є / Немає») можна редагувати, не вибираючи модель
+    if (!v && preset.presenceOrCount && item.item_name === preset.name) {
+      return { newName: item.item_name, cols: noCountCols(item, f) }
+    }
     if (!v) return { error: `Оберіть ${preset.variantLabel || 'вид'}` }
     let detail = v
     let callsignName = ''
@@ -64,7 +79,8 @@ export const buildEditedItem = (item, preset, f) => {
         detail = `${v} "${callsignName}"`
       }
     }
-    return { newName: nameWithDetail(preset.name, detail), cols: { variant: detail }, callsignName }
+    const cols = { variant: detail, ...noCountCols(item, f) }
+    return { newName: nameWithDetail(preset.name, detail), cols, callsignName }
   }
   if (preset && preset.freeName) {
     const n = f.name.trim()

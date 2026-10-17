@@ -1,6 +1,6 @@
 import { round2 } from '../utils/number.js'
 import { mergeNotes } from '../domain/notes.js'
-import { unitOf } from '../domain/catalog.js'
+import { unitOf, isPresenceOrCount } from '../domain/catalog.js'
 import { itemParts } from '../domain/itemName.js'
 import { failure, success } from './result.js'
 
@@ -26,11 +26,18 @@ export const findSerialClash = async (preset, brand, serial, repo) => {
 }
 
 // Таке майно вже є на позиції з тим самим статусом: оновлюємо наявний рядок замість дубліката
-export const mergeIntoExisting = async (row, { preset, fullName, qty, notes }, repo) => {
-  if (preset && preset.presence) {
+export const mergeIntoExisting = async (row, { preset, fullName, qty, notes, noCount = false }, repo) => {
+  const combined = !!(preset && isPresenceOrCount(fullName))
+  // У пункта з комбінованим обліком рядок має бути або «просто є», або з кількістю: змішувати не можна
+  if (combined && !!row.no_count !== noCount) {
+    return failure(row.no_count
+      ? `«${fullName}» уже є як «Є / Немає». Щоб вказати кількість, змініть облік у вікні редагування запису`
+      : `Уже є з кількістю: ${row.quantity} ${unitOf(fullName)}. Щоб позначити просто «Є», змініть облік у вікні редагування запису`)
+  }
+  if ((preset && preset.presence) || (combined && noCount)) {
     const { error } = await repo.updateItem(row.id, { quantity: qty > 0 ? 1 : 0 })
     if (error) return failure('Помилка оновлення: ' + error.message)
-    return success(`${preset.name}: ${qty > 0 ? 'є' : 'немає'}`, { reload: true, formPatch: { quantity: 1 } })
+    return success(`${fullName}: ${qty > 0 ? 'є' : 'немає'}`, { reload: true, formPatch: { quantity: 1 } })
   }
   if (qty === 0) {
     return failure(`Уже є: ${row.quantity} ${unitOf(fullName)}. Щоб позначити, що немає, змініть кількість у таблиці на 0`)

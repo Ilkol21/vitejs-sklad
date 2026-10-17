@@ -6,6 +6,7 @@
 // hasModel: окреме поле «Модель» (brandLabel: підпис поля марки/назви); в Excel назва і модель йдуть в одну колонку «Марка»
 // callsign: необов'язкове ім'я дрона (у назві пишеться в лапках, напр. Mavic 4 Pro "Панда")
 // presence: без підрахунку, лише «Є / Немає» (у базі 1 або 0)
+// presenceOrCount: комбінований облік: кожен рядок або «просто є» (колонка no_count = true), або з кількістю
 // unit: одиниця виміру ('л'; за замовчуванням шт.); lengthM: довжина одного відрізка в метрах + кількість відрізків
 
 export const PRESET_ITEMS = [
@@ -28,12 +29,12 @@ export const PRESET_ITEMS = [
   { name: 'Протигази', category: 'Спорядження' },
   { name: 'Вогнегасники', category: 'Спорядження' },
   { name: 'Пульти до дронів', category: 'БПЛА', variants: ['Для 4 Pro', 'Для Матріс', 'Для Outel', 'Для 3 серії'] },
-  { name: 'Батарейки до дронів', category: 'БПЛА', variants: ['Аутель', 'Мавік 3', 'Матріс', 'Мавік 4 Pro'] },
+  { name: 'Батарейки до дронів', category: 'БПЛА', variants: ['Аутель', 'Мавік 3', 'Матріс', 'Matrice шиті', 'Matrice не шиті', 'Мавік 4 Pro'] },
   { name: 'Планшети', category: 'БПЛА', needsSerial: true, hasModel: true, brandLabel: 'Назва пристрою' },
   { name: 'Дрони', category: 'БПЛА', callsign: true, variantLabel: 'модель дрона', variants: ['Mavic 3 Pro', 'Mavic 3T', 'Mavic 3TA', 'Mavic 4 Pro', 'Matrice 4T', 'Outel', 'Matrice 4e'] },
   { name: 'Перехідники', category: 'Інше', variants: ['Для 3 серії', 'Для 4 Pro', 'Для Outel'] },
-  { name: 'БК', category: 'Боєприпаси', variants: ['ВОГ-17', 'Патрони 5.56'] },
-  { name: 'Скиди', category: 'БПЛА', variants: ['Одинарний', 'Подвійний'] },
+  { name: 'БК', category: 'Боєприпаси', variants: ['ВОГ-17', 'Патрони 5.56', 'Патрони 5.45'] },
+  { name: 'Скиди', category: 'БПЛА', variants: ['Одинарний', 'Подвійний', 'Для 4 Pro', 'Для Матріс'] },
   { name: 'Рупор', category: 'Зв\'язок', variants: ['Для 3 серії', 'Для 4 Pro', 'Для Матріс'] },
   { name: 'Зарядка до рації', category: 'Зв\'язок', needsSerial: true, noBrand: true },
   { name: 'Маск-сітка', category: 'Спорядження' },
@@ -44,7 +45,7 @@ export const PRESET_ITEMS = [
   { name: 'Зіп до генератора', category: 'Живлення' },
   { name: 'Трійники', category: 'Живлення' },
   { name: 'Світло', category: 'Живлення', presence: true },
-  { name: 'Лопасті', category: 'БПЛА', presence: true },
+  { name: 'Лопасті', category: 'БПЛА', variantLabel: 'модель', variants: ['Mavic 4 Pro', 'Matrice', 'Outel'], presenceOrCount: true },
   { name: 'Стяжки', category: 'Витратні матеріали', presence: true },
   { name: 'Ізолента', category: 'Витратні матеріали' },
   { name: 'Сітка від ФПВ', category: 'Спорядження' },

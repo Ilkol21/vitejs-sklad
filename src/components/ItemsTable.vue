@@ -1,6 +1,6 @@
 <script setup>
 import { STATUS_OPTIONS } from '../config/app.js'
-import { isPresence, allowsDecimal, unitOf } from '../domain/catalog.js'
+import { isPresenceRow, allowsDecimal, unitOf } from '../domain/catalog.js'
 import StatusOptions from './StatusOptions.vue'
 import StatusTabs from './StatusTabs.vue'
 
@@ -42,13 +42,13 @@ const statusClass = value => STATUS_OPTIONS.find(o => o.value === value)?.cssCla
               </select>
             </td>
             <td class="td-qty">
-              <select v-if="isPresence(item.item_name)" :value="Number(item.quantity) > 0 ? '1' : '0'" @change="e => $emit('update-qty', item.id, e.target.value)" class="styled-select presence-select" :class="Number(item.quantity) > 0 ? 'status-green' : 'status-red'">
+              <select v-if="isPresenceRow(item)" :value="Number(item.quantity) > 0 ? '1' : '0'" @change="e => $emit('update-qty', item.id, e.target.value)" class="styled-select presence-select" :class="Number(item.quantity) > 0 ? 'status-green' : 'status-red'">
                 <option value="1">Є</option>
                 <option value="0">Немає</option>
               </select>
               <input v-else type="number" min="0" :step="allowsDecimal(item.item_name) ? '0.1' : '1'" :value="item.quantity" @change="e => $emit('update-qty', item.id, e.target.value)" class="styled-input qty-edit font-bold" />
               <div v-if="allowsDecimal(item.item_name)" class="qty-unit">{{ unitOf(item.item_name) }}</div>
-              <div v-if="Number(item.quantity) === 0 && !isPresence(item.item_name)" class="no-stock">немає</div>
+              <div v-if="Number(item.quantity) === 0 && !isPresenceRow(item)" class="no-stock">немає</div>
             </td>
             <td class="td-action">
               <button @click="$emit('edit', item)" class="edit-btn" title="Редагувати">✎</button>

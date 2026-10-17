@@ -12,7 +12,7 @@ const props = defineProps({
 const emit = defineEmits(['saved'])
 
 const {
-  selectedPresetItem, status, quantity, notes, brand, serial, variant, deviceModel, callsign,
+  selectedPresetItem, status, quantity, noCount, notes, brand, serial, variant, deviceModel, callsign,
   customName, kitNumbers, lengthM, extraQty, currentPreset, onPresetChange, submit
 } = useAddForm(toRef(props, 'positionName'), () => emit('saved', status.value))
 </script>
@@ -55,8 +55,13 @@ const {
         <StatusOptions />
       </select>
 
+      <select v-if="currentPreset && currentPreset.presenceOrCount" v-model="noCount" class="styled-select">
+        <option :value="false">Облік: з кількістю</option>
+        <option :value="true">Облік: просто є / немає</option>
+      </select>
+
       <div class="qty-notes-row">
-        <select v-if="currentPreset && currentPreset.presence" v-model.number="quantity" class="styled-select qty-input presence-select">
+        <select v-if="currentPreset && (currentPreset.presence || (currentPreset.presenceOrCount && noCount))" v-model.number="quantity" class="styled-select qty-input presence-select">
           <option :value="1">Є</option>
           <option :value="0">Немає</option>
         </select>

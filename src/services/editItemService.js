@@ -1,7 +1,7 @@
 import * as itemsRepository from '../api/itemsRepository.js'
-import { round2 } from '../utils/number.js'
 import { mergeNotes } from '../domain/notes.js'
-import { unitOf } from '../domain/catalog.js'
+import { qtyText, quantityColumns } from '../domain/catalog.js'
+import { mergeRowQuantities } from '../domain/quantity.js'
 import { itemParts } from '../domain/itemName.js'
 import { isPlaceholderSerial } from '../domain/serial.js'
 
@@ -43,14 +43,17 @@ const findSerialClash = async (item, preset, cols, repo) => {
 const mergeOnRename = async (item, newName, form, confirm, repo) => {
   const { data: same, error } = await repo.findSameRow({
     positionName: item.position_name, itemName: newName, status: item.status,
-    columns: 'id, quantity, notes', excludeId: item.id
+    columns: quantityColumns(newName, 'id, quantity, notes'), excludeId: item.id
   })
   if (error) return { result: checkError(error) }
   if (!(same && same.length)) return {}
 
   const target = same[0]
-  const total = round2(Number(target.quantity) + Number(item.quantity))
-  const question = `Запис «${newName}» уже є (${target.quantity} ${unitOf(newName)}).\nОб'єднати: буде ${total} ${unitOf(newName)}, а цей рядок зникне?`
+  // Рядок, що зливається, має режим обліку з форми; «Є» й кількість не мішаються
+  const merged = mergeRowQuantities(target, { ...item, no_count: form.noCount }, newName)
+  if (merged.error) return { result: failure(merged.error) }
+  const total = merged.total
+  const question = `Запис «${newName}» уже є (${qtyText(newName, target.quantity, target.no_count)}).\nОб'єднати: буде ${qtyText(newName, total, merged.noCount)}, а цей рядок зникне?`
   if (!confirm(question)) return { result: nothing() }
 
   const notes = mergeNotes(target.notes, form.notes)
@@ -58,7 +61,7 @@ const mergeOnRename = async (item, newName, form, confirm, repo) => {
   if (mergeErr) return { result: failure('Помилка об\'єднання: ' + mergeErr.message) }
   const { error: delErr } = await repo.deleteItem(item.id)
   if (delErr) return { result: failure('Помилка видалення: ' + delErr.message) }
-  return { result: success(`Об'єднано з наявним рядком: тепер ${total} ${unitOf(newName)}`, { reload: true, close: true }) }
+  return { result: success(`Об'єднано з наявним рядком: тепер ${qtyText(newName, total, merged.noCount)}`, { reload: true, close: true }) }
 }
 
 export const saveEdit = async (item, preset, form, { confirm = window.confirm.bind(window) } = {}, repo = itemsRepository) => {

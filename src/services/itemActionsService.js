@@ -1,6 +1,7 @@
 import * as itemsRepository from '../api/itemsRepository.js'
 import { round2 } from '../utils/number.js'
-import { allowsDecimal, isPresence, qtyText } from '../domain/catalog.js'
+import { allowsDecimal, qtyText, quantityColumns } from '../domain/catalog.js'
+import { mergeRowQuantities } from '../domain/quantity.js'
 import { failure, success, nothing } from './result.js'
 
 // Швидкі дії з рядком таблиці: кількість, статус, видалення.
@@ -22,20 +23,20 @@ export const changeStatus = async (item, newStatus, repo = itemsRepository) => {
 
   const { data: same, error: sameErr } = await repo.findSameRow({
     positionName: item.position_name, itemName: item.item_name, status: newStatus,
-    columns: 'id, quantity', excludeId: item.id
+    columns: quantityColumns(item.item_name, 'id, quantity'), excludeId: item.id
   })
   if (sameErr) return { ...failure('Помилка статусу: ' + sameErr.message), reload: true }
 
   if (same && same.length) {
     const target = same[0]
-    const total = isPresence(item.item_name)
-      ? Math.max(Number(target.quantity), Number(item.quantity))
-      : round2(Number(target.quantity) + Number(item.quantity))
+    const merged = mergeRowQuantities(target, item, item.item_name)
+    if (merged.error) return { ...failure(merged.error), reload: true }
+    const total = merged.total
     const { error: mergeErr } = await repo.updateItem(target.id, { quantity: total })
     if (mergeErr) return { ...failure('Помилка об\'єднання: ' + mergeErr.message), reload: true }
     const { error: delErr } = await repo.deleteItem(item.id)
     if (delErr) return { ...failure('Помилка видалення: ' + delErr.message), reload: true }
-    return success(`Об'єднано з наявним рядком: тепер ${qtyText(item.item_name, total)}`, { reload: true })
+    return success(`Об'єднано з наявним рядком: тепер ${qtyText(item.item_name, total, merged.noCount)}`, { reload: true })
   }
 
   const { error } = await repo.updateItem(item.id, { status: newStatus })
@@ -45,7 +46,7 @@ export const changeStatus = async (item, newStatus, repo = itemsRepository) => {
 // Текст підтвердження видалення: воно безповоротне, а командир отримає про нього повідомлення в Telegram
 export const deleteConfirmText = item => {
   const what = item
-    ? `«${item.item_name}»\nПозиція: ${item.position_name}\nСтатус: ${item.status}\nКількість: ${qtyText(item.item_name, item.quantity)}`
+    ? `«${item.item_name}»\nПозиція: ${item.position_name}\nСтатус: ${item.status}\nКількість: ${qtyText(item.item_name, item.quantity, item.no_count)}`
     : 'цей запис'
   return `Видалити назавжди?\n\n${what}\n\nЦю дію не можна скасувати. Командир отримає повідомлення про видалення.`
 }

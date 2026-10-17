@@ -1,7 +1,7 @@
 import { POSITIONS, STATUS, STATUS_OPTIONS } from '../config/app.js'
 import { round2 } from '../utils/number.js'
 import { itemParts } from './itemName.js'
-import { presetOf, unitOf, isPresence, mergesModel } from './catalog.js'
+import { presetOf, unitOf, isPresenceRow, mergesModel } from './catalog.js'
 
 const positionIndex = name => {
   const i = POSITIONS.indexOf(name)
@@ -35,9 +35,9 @@ export const buildReportRows = list =>
       'Марка': mergesModel(p.base) ? [p.brand, p.detail].filter(Boolean).join(' ') : p.brand,
       'Серійний номер / KIT': p.serial,
       'Статус': item.status,
-      'Кількість': isPresence(item.item_name) ? '' : Number(item.quantity),
-      'Од.': isPresence(item.item_name) ? '' : unitOf(item.item_name),
-      'Наявність': isPresence(item.item_name)
+      'Кількість': isPresenceRow(item) ? '' : Number(item.quantity),
+      'Од.': isPresenceRow(item) ? '' : unitOf(item.item_name),
+      'Наявність': isPresenceRow(item)
         ? (Number(item.quantity) > 0 ? 'Є' : 'НЕМАЄ')
         : (Number(item.quantity) > 0 ? '' : 'НЕМАЄ'),
       'Примітки': item.notes || ''
@@ -60,13 +60,15 @@ export const buildSummaryRows = (list, withPosition) => {
         base: p.base,
         label,
         unit: unitOf(item.item_name),
-        pres: isPresence(item.item_name),
+        pres: true,
         ok: 0,
         rep: 0,
         need: 0
       })
     }
     const g = groups.get(key)
+    // Група показується як «Є / Немає» лише коли всі її рядки без кількості; у мішаній — кількості сумуються
+    g.pres = g.pres && isPresenceRow(item)
     const q = Number(item.quantity) || 0
     if (item.status === STATUS.OK) g.ok = round2(g.ok + q)
     else if (item.status === STATUS.REPAIR) g.rep = round2(g.rep + q)

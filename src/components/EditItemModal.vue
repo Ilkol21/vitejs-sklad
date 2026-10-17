@@ -45,6 +45,11 @@ defineEmits(['save', 'cancel'])
         </select>
         <label v-if="preset.callsign" class="modal-label">Ім'я дрона (необов'язково)</label>
         <input v-if="preset.callsign" v-model="form.callsign" maxlength="40" class="styled-input" />
+        <label v-if="preset.presenceOrCount" class="modal-label">Облік</label>
+        <select v-if="preset.presenceOrCount" v-model="form.noCount" class="styled-select">
+          <option :value="false">З кількістю (штуки)</option>
+          <option :value="true">Просто є / немає</option>
+        </select>
       </template>
 
       <template v-else-if="preset && preset.freeName">

@@ -1,6 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { addItem } from '../src/services/addItemService.js'
+import { saveEdit } from '../src/services/editItemService.js'
+import { editFormFromItem } from '../src/services/editFormService.js'
+import { presetOf } from '../src/domain/catalog.js'
 import { POS, OTHER, baseForm, setup } from './helpers/setup.mjs'
 
 const add = (form, repo) => addItem(form, { positionName: POS }, repo)
@@ -100,6 +103,92 @@ test('кабель: довжина відрізка', async () => {
   assert.equal(client.state.rows[0].item_name, 'Кабель RG8 — 12.35 м')
   const bad = await add({ ...form, lengthM: '0' }, repo)
   assert.equal(bad.message, 'Вкажіть довжину відрізка в метрах (більше 0)')
+})
+
+test('маск-сітка: метраж і кількість, однакова довжина зливається кількістю', async () => {
+  const { client, repo } = setup()
+  const form = baseForm({ presetName: 'Маск-сітка', category: 'Спорядження', lengthM: '5', quantity: 2 })
+  assert.equal((await add(form, repo)).message, 'Додано на позицію!')
+  assert.equal(client.state.rows[0].item_name, 'Маск-сітка — 5 м')
+  assert.equal(client.state.rows[0].quantity, 2)
+  await add({ ...form, quantity: 3 }, repo)
+  await add({ ...form, lengthM: '10', quantity: 1 }, repo)
+  const byName = Object.fromEntries(client.state.rows.map(x => [x.item_name, x.quantity]))
+  assert.deepEqual(byName, { 'Маск-сітка — 5 м': 5, 'Маск-сітка — 10 м': 1 })
+  assert.equal((await add({ ...form, lengthM: '0' }, repo)).message, 'Вкажіть довжину відрізка в метрах (більше 0)')
+})
+
+test('маск-сітка: старий запис без метражу редагується без довжини, метраж можна додати', async () => {
+  const item = { id: 1, position_name: POS, item_name: 'Маск-сітка', category: 'Спорядження', status: 'На позиції', quantity: 4, notes: '', variant: null, brand: null, serial: null }
+  const { client, repo } = setup([item])
+  const preset = presetOf(item.item_name)
+  const ok = { confirm: () => true }
+  assert.equal((await saveEdit(item, preset, { ...editFormFromItem(item), notes: 'нова' }, ok, repo)).message, 'Зміни збережено')
+  assert.equal(client.state.rows[0].notes, 'нова')
+  await saveEdit(client.state.rows[0], preset, { ...editFormFromItem(client.state.rows[0]), length: '7' }, ok, repo)
+  assert.equal(client.state.rows[0].item_name, 'Маск-сітка — 7 м')
+})
+
+test('маск-сітка й сітка від ФПВ: метраж необов’язковий, кабель усе ще вимагає довжину', async () => {
+  const { client, repo } = setup()
+  const fpv = baseForm({ presetName: 'Сітка від ФПВ', category: 'Спорядження', quantity: 2 })
+  assert.equal((await add(fpv, repo)).message, 'Додано на позицію!')
+  assert.equal(client.state.rows[0].item_name, 'Сітка від ФПВ')
+  await add({ ...fpv, quantity: 3, lengthM: '  ' }, repo)
+  await add({ ...fpv, quantity: 1, lengthM: '20' }, repo)
+  assert.deepEqual(Object.fromEntries(client.state.rows.map(x => [x.item_name, x.quantity])),
+    { 'Сітка від ФПВ': 5, 'Сітка від ФПВ — 20 м': 1 })
+  assert.equal((await add({ ...fpv, lengthM: '-3' }, repo)).message, 'Вкажіть довжину відрізка в метрах (більше 0)')
+  const cable = await add(baseForm({ presetName: 'Кабель RG8', lengthM: '' }), repo)
+  assert.equal(cable.message, 'Вкажіть довжину відрізка в метрах (більше 0)')
+})
+
+test('метраж сітки можна залишити порожнім при редагуванні, і він прибирається', async () => {
+  const item = { id: 1, position_name: POS, item_name: 'Маск-сітка — 5 м', category: 'Спорядження', status: 'На позиції', quantity: 2, notes: '', variant: '5 м', brand: null, serial: null }
+  const { client, repo } = setup([item])
+  const ok = { confirm: () => true }
+  const form = editFormFromItem(item)
+  assert.equal(form.length, '5')
+  await saveEdit(item, presetOf(item.item_name), { ...form, length: '' }, ok, repo)
+  assert.equal(client.state.rows[0].item_name, 'Маск-сітка')
+  assert.equal(client.state.rows[0].variant, null)
+})
+
+test('зарядка до рації: S/N необов’язковий — без номера майно з кількістю, з номером — один запис', async () => {
+  const { client, repo } = setup()
+  const form = baseForm({ presetName: 'Зарядка до рації', category: 'Зв\'язок', quantity: 4 })
+  assert.equal((await add(form, repo)).message, 'Додано на позицію!')
+  assert.equal((await add({ ...form, quantity: 2 }, repo)).message, 'Таке майно вже є: кількість збільшено, тепер 6 шт.')
+  assert.equal(client.state.rows[0].item_name, 'Зарядка до рації')
+  assert.equal(client.state.rows[0].serial ?? null, null)
+  // з номером — окремий запис одиниці і перевірка на дублікати
+  assert.equal((await add({ ...form, serial: 'ZR-1', quantity: 9 }, repo)).message, 'Додано на позицію!')
+  assert.equal(client.state.rows[1].item_name, 'Зарядка до рації — S/N ZR-1')
+  assert.equal(client.state.rows[1].quantity, 1)
+  assert.equal((await add({ ...form, serial: 'zr-1' }, repo)).message, `Такий серійний номер уже є: ${POS}`)
+  // рація досі потребує номера
+  assert.equal((await add(baseForm({ presetName: 'Рація', category: 'Зв\'язок', brand: 'M', serial: '' }), repo)).message, 'Вкажіть серійний номер')
+})
+
+test('зарядка до рації: номер вказується при редагуванні (з групи — для однієї одиниці) і може бути прибраний', async () => {
+  const mk = (id, name, q, serial = null) => ({ id, position_name: POS, item_name: name, category: 'Зв\'язок', status: 'На позиції', quantity: q, notes: '', variant: null, brand: null, serial })
+  const group = mk(1, 'Зарядка до рації', 3)
+  const taken = mk(2, 'Зарядка до рації — S/N A1', 1, 'A1')
+  const { client, repo } = setup([group, taken])
+  const preset = presetOf(group.item_name)
+  const ok = { confirm: () => true }
+  assert.equal((await saveEdit(group, preset, { ...editFormFromItem(group), serial: 'a1' }, ok, repo)).message, `Такий серійний номер уже є: ${POS}`)
+  assert.equal(client.state.rows.find(r => r.id === 1).quantity, 3)
+  const r = await saveEdit(group, preset, { ...editFormFromItem(group), serial: 'B2' }, ok, repo)
+  assert.equal(r.message, 'Номер додано одній одиниці, ще 2 без номера')
+  assert.equal(client.state.rows.find(r2 => r2.id === 1).quantity, 2)
+  const created = client.state.rows.find(r2 => r2.item_name === 'Зарядка до рації — S/N B2')
+  assert.equal(created.quantity, 1)
+  assert.equal(created.serial, 'B2')
+  // прибирання номера: запис стає звичайним і зливається з рядком без номера (після підтвердження)
+  const cleared = await saveEdit(created, preset, { ...editFormFromItem(created), serial: '' }, ok, repo)
+  assert.match(cleared.message, /^Об'єднано з наявним рядком: тепер 3 шт\./)
+  assert.equal(client.state.rows.find(r2 => r2.id === 1).quantity, 3)
 })
 
 test('помилки бази повертаються з тими самими текстами', async () => {

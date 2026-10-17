@@ -33,7 +33,7 @@ defineEmits(['save', 'cancel'])
         <input v-if="!preset.noBrand" v-model="form.brand" class="styled-input" />
         <label v-if="preset.hasModel" class="modal-label">Модель *</label>
         <input v-if="preset.hasModel" v-model="form.model" class="styled-input" />
-        <label class="modal-label">Серійний номер *</label>
+        <label class="modal-label">Серійний номер{{ preset.serialOptional ? ' (необов\'язково)' : ' *' }}</label>
         <SerialField v-model="form.serial" />
       </template>
 
@@ -58,7 +58,7 @@ defineEmits(['save', 'cancel'])
       </template>
 
       <template v-else-if="preset && preset.lengthM">
-        <label class="modal-label">Довжина одного відрізка, м *</label>
+        <label class="modal-label">Довжина одного відрізка, м{{ preset.lengthOptional ? ' (необов\'язково)' : ' *' }}</label>
         <input v-model="form.length" type="number" min="0.1" step="0.1" class="styled-input" />
       </template>
 

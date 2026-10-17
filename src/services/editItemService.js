@@ -4,6 +4,7 @@ import { qtyText, quantityColumns } from '../domain/catalog.js'
 import { mergeRowQuantities } from '../domain/quantity.js'
 import { itemParts } from '../domain/itemName.js'
 import { isPlaceholderSerial, sameSerial } from '../domain/serial.js'
+import { isBlank } from '../domain/validation.js'
 
 const SINGLE_SERIAL_ERROR = 'Серійний номер один: спершу зменшіть кількість до 1'
 import { buildEditedItem } from './editFormService.js'
@@ -64,6 +65,23 @@ const mergeOnRename = async (item, newName, form, confirm, repo) => {
   return { result: success(`Об'єднано з наявним рядком: тепер ${qtyText(newName, total, merged.noCount)}`, { reload: true, close: true }) }
 }
 
+// Одна одиниця з номером виділяється в новий рядок, а в наявному кількість зменшується на 1.
+// Спершу додаємо новий рядок: якщо номер зайнятий базою, кількість наявного не змінюється
+const splitSerialOff = async (item, newName, cols, form, repo) => {
+  const { error: insertErr } = await repo.insertItem({
+    position_name: item.position_name, category: item.category, item_name: newName, status: item.status,
+    quantity: 1, notes: form.notes.trim(), ...cols
+  })
+  if (insertErr) {
+    console.error('SUPABASE ERROR:', insertErr)
+    return failure(insertErrorText(insertErr))
+  }
+  const left = Number(item.quantity) - 1
+  const { error } = await repo.updateItem(item.id, { quantity: left })
+  if (error) return failure('Помилка оновлення: ' + error.message)
+  return success(`Номер додано одній одиниці, ще ${left} без номера`, { reload: true, close: true })
+}
+
 export const saveEdit = async (item, preset, form, { confirm = window.confirm.bind(window) } = {}, repo = itemsRepository) => {
   if (!item) return nothing()
 
@@ -78,9 +96,13 @@ export const saveEdit = async (item, preset, form, { confirm = window.confirm.bi
   }
 
   // Унікальний номер / KIT; позначки «Невідомо» / «Зафарбовано» унікальними не є, тому зливаються
-  const hasSerial = preset && (preset.kit || preset.needsSerial) && !isPlaceholderSerial(form.serial)
-  // Рядок «Невідомо» / «Зафарбовано» може мати кілька одиниць, а реальний номер має лише один запис
-  if (hasSerial && Number(item.quantity) > 1 && isPlaceholderSerial(itemParts(item).serial)) {
+  // Порожній номер у пункта без обов'язкового S/N унікальним не є
+  const hasSerial = preset && (preset.kit || preset.needsSerial) && !isPlaceholderSerial(form.serial) && !isBlank(form.serial)
+  // Рядок «Невідомо» / «Зафарбовано» або без номера може мати кілька одиниць, а реальний номер має лише один запис
+  const oldSerial = itemParts(item).serial
+  // Додати номер одній з кількох одиниць без номера (зарядка до рації): вона стає окремим записом, решта лишається без номера
+  const splitOff = !!(hasSerial && preset.serialOptional && Number(item.quantity) > 1 && isBlank(oldSerial))
+  if (!splitOff && hasSerial && Number(item.quantity) > 1 && (isPlaceholderSerial(oldSerial) || isBlank(oldSerial))) {
     return failure(SINGLE_SERIAL_ERROR)
   }
   if (hasSerial) {
@@ -88,6 +110,8 @@ export const saveEdit = async (item, preset, form, { confirm = window.confirm.bi
     if (error) return checkError(error)
     if (clash) return failure(`Такий ${preset.kit ? 'S/N' : 'серійний номер'} уже є: ${clash.position_name}`)
   }
+
+  if (splitOff) return splitSerialOff(item, newName, cols, form, repo)
 
   if (newName !== item.item_name && !hasSerial) {
     const { result } = await mergeOnRename(item, newName, form, confirm, repo)

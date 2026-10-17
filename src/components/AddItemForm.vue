@@ -1,5 +1,5 @@
 <script setup>
-import { toRef } from 'vue'
+import { toRef, computed } from 'vue'
 import { PRESET_ITEMS } from '../config/presets.js'
 import { useAddForm } from '../composables/useAddForm.js'
 import StatusOptions from './StatusOptions.vue'
@@ -15,6 +15,14 @@ const {
   selectedPresetItem, status, quantity, noCount, notes, brand, serial, variant, deviceModel, callsign,
   customName, kitNumbers, lengthM, extraQty, currentPreset, onPresetChange, submit
 } = useAddForm(toRef(props, 'positionName'), () => emit('saved', status.value))
+
+// Кількість заблокована (завжди 1) для серійних номерів; у пункта з необов'язковим S/N — лише коли номер вписано
+const quantityLocked = computed(() => {
+  const p = currentPreset.value
+  if (!p) return false
+  if (p.kit) return true
+  return !!p.needsSerial && !(p.serialOptional && !String(serial.value).trim())
+})
 </script>
 
 <template>
@@ -28,7 +36,7 @@ const {
       <div v-if="currentPreset && currentPreset.needsSerial" class="serial-row">
         <input v-if="!currentPreset.noBrand" v-model="brand" :placeholder="(currentPreset.brandLabel || 'Марка') + ' *'" class="styled-input notes-input" />
         <input v-if="currentPreset.hasModel" v-model="deviceModel" placeholder="Модель *" class="styled-input notes-input" />
-        <SerialField v-model="serial" placeholder="Серійний номер *" />
+        <SerialField v-model="serial" :placeholder="currentPreset.serialOptional ? 'Серійний номер (необов\'язково)' : 'Серійний номер *'" />
       </div>
 
       <select v-if="currentPreset && currentPreset.variants" v-model="variant" class="styled-select item-select">
@@ -40,7 +48,7 @@ const {
 
       <input v-if="currentPreset && currentPreset.freeName" v-model="customName" placeholder="Назва *" class="styled-input" />
 
-      <input v-if="currentPreset && currentPreset.lengthM" v-model="lengthM" type="number" min="0.1" step="0.1" placeholder="Довжина одного відрізка, м *" class="styled-input" />
+      <input v-if="currentPreset && currentPreset.lengthM" v-model="lengthM" type="number" min="0.1" step="0.1" :placeholder="currentPreset.lengthOptional ? 'Довжина одного відрізка, м (необов\'язково)' : 'Довжина одного відрізка, м *'" class="styled-input" />
 
       <div v-if="currentPreset && currentPreset.kit" class="serial-row">
         <SerialField v-model="kitNumbers" :prefix="currentPreset.serialPrefix" placeholder="S/N *" />
@@ -65,7 +73,7 @@ const {
           <option :value="1">Є</option>
           <option :value="0">Немає</option>
         </select>
-        <input v-else type="number" v-model="quantity" :disabled="currentPreset && (currentPreset.needsSerial || currentPreset.kit)" min="0" :step="currentPreset && currentPreset.unit ? '0.1' : '1'" :placeholder="currentPreset && currentPreset.unit === 'л' ? 'Літри' : (currentPreset && currentPreset.unit === 'м' ? 'Метри' : (currentPreset && currentPreset.lengthM ? 'К-ть відрізків' : 'К-ть'))" class="styled-input qty-input font-bold" />
+        <input v-else type="number" v-model="quantity" :disabled="quantityLocked" min="0" :step="currentPreset && currentPreset.unit ? '0.1' : '1'" :placeholder="currentPreset && currentPreset.unit === 'л' ? 'Літри' : (currentPreset && currentPreset.unit === 'м' ? 'Метри' : (currentPreset && currentPreset.lengthM ? 'К-ть відрізків' : 'К-ть'))" class="styled-input qty-input font-bold" />
         <input v-model="notes" placeholder="Примітки / номер" class="styled-input notes-input" />
       </div>
 

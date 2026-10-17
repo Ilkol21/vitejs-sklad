@@ -5,6 +5,9 @@ import { normalizeSerial } from './serial.js'
 
 // Перевірки полів форми. Кожна повертає { value } або { error }, щоб не змішувати перевірку з показом повідомлень.
 
+// Поле не заповнене (порожнє або з самих пробілів)
+export const isBlank = raw => String(raw ?? '').trim() === ''
+
 // Довжина одного відрізка в метрах (кабель): число більше 0
 export const parseSegmentLength = raw => {
   const len = round2(String(raw).trim() === '' ? NaN : raw)

@@ -8,6 +8,8 @@
 // presence: без підрахунку, лише «Є / Немає» (у базі 1 або 0)
 // presenceOrCount: комбінований облік: кожен рядок або «просто є» (колонка no_count = true), або з кількістю
 // unit: одиниця виміру ('л'; за замовчуванням шт.); lengthM: довжина одного відрізка в метрах + кількість відрізків
+// lengthOptional: довжину можна не вказувати (запис без метражу з простою кількістю)
+// serialOptional: серійний номер можна не вказувати (запис без номера з простою кількістю; з номером — один запис)
 
 export const PRESET_ITEMS = [
   { name: 'Старлінк', category: 'Зв\'язок', kit: true, serialPrefix: 'KIT', extra: { name: 'Роутер Старлінк', label: 'Роутер', plural: 'роутерів' }, variantLabel: 'версію', variants: ['Міні', '2 версія', '3 версія'] },
@@ -36,8 +38,8 @@ export const PRESET_ITEMS = [
   { name: 'БК', category: 'Боєприпаси', variants: ['ВОГ-17', 'Патрони 5.56', 'Патрони 5.45'] },
   { name: 'Скиди', category: 'БПЛА', variants: ['Одинарний', 'Подвійний', 'Для 4 Pro', 'Для Матріс'] },
   { name: 'Рупор', category: 'Зв\'язок', variants: ['Для 3 серії', 'Для 4 Pro', 'Для Матріс'] },
-  { name: 'Зарядка до рації', category: 'Зв\'язок', needsSerial: true, noBrand: true },
-  { name: 'Маск-сітка', category: 'Спорядження' },
+  { name: 'Зарядка до рації', category: 'Зв\'язок', needsSerial: true, noBrand: true, serialOptional: true },
+  { name: 'Маск-сітка', category: 'Спорядження', lengthM: true, lengthOptional: true },
   { name: 'Сокира', category: 'Інструменти' },
   { name: 'Степлери', category: 'Інструменти' },
   { name: 'Цвяхи', category: 'Витратні матеріали' },
@@ -48,7 +50,7 @@ export const PRESET_ITEMS = [
   { name: 'Лопасті', category: 'БПЛА', variantLabel: 'модель', variants: ['Mavic 4 Pro', 'Matrice', 'Outel'], presenceOrCount: true },
   { name: 'Стяжки', category: 'Витратні матеріали', presence: true },
   { name: 'Ізолента', category: 'Витратні матеріали' },
-  { name: 'Сітка від ФПВ', category: 'Спорядження' },
+  { name: 'Сітка від ФПВ', category: 'Спорядження', lengthM: true, lengthOptional: true },
   { name: 'Спальники', category: 'Спорядження' },
   { name: 'Каримати', category: 'Спорядження' },
   { name: 'Мішки', category: 'Витратні матеріали' },

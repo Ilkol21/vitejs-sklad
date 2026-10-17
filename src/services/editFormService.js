@@ -1,6 +1,6 @@
 import { itemParts, splitCallsign, cleanCallsign, hasListSeparator, nameWithDetail, nameWithSerial, nameWithKit } from '../domain/itemName.js'
 import { presetOf } from '../domain/catalog.js'
-import { parseSegmentLength, parseSerialFields } from '../domain/validation.js'
+import { isBlank, parseSegmentLength, parseSerialFields } from '../domain/validation.js'
 import { normalizeSerial, withSerialPrefix, serialForColumn } from '../domain/serial.js'
 
 // Форма редагування: заповнення з запису і перетворення назад у нову назву та колонки.
@@ -56,6 +56,10 @@ export const buildEditedItem = (item, preset, f) => {
     return { newName: nameWithKit(preset, v, kit), cols: { variant: v, brand: null, serial: serialForColumn(kit) } }
   }
   if (preset && preset.needsSerial) {
+    // Необов'язковий серійний номер: порожнє поле робить запис звичайним майном без номера
+    if (preset.serialOptional && isBlank(f.serial)) {
+      return { newName: preset.name, cols: { variant: null, brand: null, serial: null } }
+    }
     const fields = parseSerialFields(preset, f, 'Вводьте один серійний номер без ком')
     if (fields.error) return { error: fields.error }
     const { brand, model, serial } = fields
@@ -89,6 +93,8 @@ export const buildEditedItem = (item, preset, f) => {
     return { newName: nameWithDetail(preset.name, n), cols: { variant: n } }
   }
   if (preset && preset.lengthM) {
+    // Необов'язкова довжина: порожнє поле робить запис без метражу
+    if (preset.lengthOptional && isBlank(f.length)) return { newName: preset.name, cols: { variant: null } }
     const len = parseSegmentLength(f.length)
     if (len.error) return { error: len.error }
     return { newName: nameWithDetail(preset.name, `${len.value} м`), cols: { variant: `${len.value} м` } }

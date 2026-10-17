@@ -3,7 +3,7 @@ import { round2 } from '../utils/number.js'
 import { findPreset, allowsDecimal, quantityColumns } from '../domain/catalog.js'
 import { nameWithDetail, nameWithSerial } from '../domain/itemName.js'
 import { isPlaceholderSerial, serialForColumn } from '../domain/serial.js'
-import { parseSegmentLength, parseSerialFields, validateQuantity } from '../domain/validation.js'
+import { isBlank, parseSegmentLength, parseSerialFields, validateQuantity } from '../domain/validation.js'
 import { addExtraItem, parseExtraQty } from './extraItemService.js'
 import { addKitItem } from './addKitService.js'
 import { findSerialClash, mergeIntoExisting } from './duplicateService.js'
@@ -46,7 +46,10 @@ export const addItem = async (form, ctx, repo = itemsRepository) => {
   // Комбінований облік (Лопасті): рядок «просто є / немає» без кількості (колонка no_count) або зі штуками
   const noCount = !!(preset && preset.presenceOrCount && form.noCount)
 
-  if (preset && preset.needsSerial) {
+  // Необов'язковий серійний номер (зарядка до рації): без номера це звичайне майно з кількістю
+  const plainSerial = !!(preset && preset.needsSerial && preset.serialOptional && isBlank(form.serial))
+
+  if (preset && preset.needsSerial && !plainSerial) {
     const fields = parseSerialFields(
       preset,
       { brand: form.brand, serial: form.serial, model: form.deviceModel },
@@ -77,7 +80,8 @@ export const addItem = async (form, ctx, repo = itemsRepository) => {
     if (!n) return failure('Вкажіть назву')
     fullName = nameWithDetail(preset.name, n)
     cols = { variant: n }
-  } else if (preset && preset.lengthM) {
+  } else if (preset && preset.lengthM && !(preset.lengthOptional && isBlank(form.lengthM))) {
+    // Довжина необов'язкова не скрізь: без неї запис лишається просто з назвою й кількістю
     const len = parseSegmentLength(form.lengthM)
     if (len.error) return failure(len.error)
     fullName = nameWithDetail(preset.name, `${len.value} м`)
@@ -93,7 +97,7 @@ export const addItem = async (form, ctx, repo = itemsRepository) => {
   if (qtyError) return failure(qtyError)
 
   // Таке саме майно на позиції з тим самим статусом не дублюємо: додаємо кількість до наявного рядка
-  if (!(preset && preset.needsSerial) || placeholderSerial) {
+  if (!(preset && preset.needsSerial) || placeholderSerial || plainSerial) {
     const { data: same, error: sameErr } = await repo.findSameRow({
       positionName: ctx.positionName, itemName: fullName, status: form.status, columns: quantityColumns(fullName, 'id, quantity, notes')
     })

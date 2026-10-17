@@ -74,6 +74,8 @@ export const buildEditedItem = (item, preset, f) => {
     if (!v && preset.presenceOrCount && item.item_name === preset.name) {
       return { newName: item.item_name, cols: noCountCols(item, f) }
     }
+    // Необов'язковий вид: порожнє поле робить запис без виду
+    if (!v && preset.variantOptional) return { newName: preset.name, cols: { variant: null } }
     if (!v) return { error: `Оберіть ${preset.variantLabel || 'вид'}` }
     let detail = v
     let callsignName = ''

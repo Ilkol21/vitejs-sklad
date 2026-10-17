@@ -72,9 +72,12 @@ export const addItem = async (form, ctx, repo = itemsRepository) => {
       if (dup) return failure('Такий серійний номер уже є: ' + dup.position_name)
     }
   } else if (preset && preset.variants) {
-    if (!form.variant) return failure(`Оберіть ${preset.variantLabel || 'вид'}`)
-    fullName = nameWithDetail(preset.name, form.variant)
-    cols = { variant: form.variant }
+    // Необов'язковий вид (переноски): без нього запис лишається просто з назвою й кількістю
+    if (form.variant || !preset.variantOptional) {
+      if (!form.variant) return failure(`Оберіть ${preset.variantLabel || 'вид'}`)
+      fullName = nameWithDetail(preset.name, form.variant)
+      cols = { variant: form.variant }
+    }
   } else if (preset && preset.freeName) {
     const n = form.customName.trim()
     if (!n) return failure('Вкажіть назву')

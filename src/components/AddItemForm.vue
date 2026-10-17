@@ -40,7 +40,8 @@ const quantityLocked = computed(() => {
       </div>
 
       <select v-if="currentPreset && currentPreset.variants" v-model="variant" class="styled-select item-select">
-        <option value="" disabled>Оберіть {{ currentPreset.variantLabel || 'вид' }} *</option>
+        <option v-if="currentPreset.variantOptional" value="">Оберіть {{ currentPreset.variantLabel || 'вид' }} (необов’язково)</option>
+        <option v-else value="" disabled>Оберіть {{ currentPreset.variantLabel || 'вид' }} *</option>
         <option v-for="m in currentPreset.variants" :key="m" :value="m">{{ m }}</option>
       </select>
 

@@ -38,8 +38,9 @@ defineEmits(['save', 'cancel'])
       </template>
 
       <template v-else-if="preset && preset.variants">
-        <label class="modal-label">{{ variantFieldLabel(preset) }} *</label>
+        <label class="modal-label">{{ variantFieldLabel(preset) }}{{ preset.variantOptional ? ' (необов’язково)' : ' *' }}</label>
         <select v-model="form.variant" class="styled-select">
+          <option v-if="preset.variantOptional" value="">Без виду</option>
           <option v-if="form.variant && !preset.variants.includes(form.variant)" :value="form.variant">{{ form.variant }} (немає в списку)</option>
           <option v-for="m in preset.variants" :key="m" :value="m">{{ m }}</option>
         </select>

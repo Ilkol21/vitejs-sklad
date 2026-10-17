@@ -191,6 +191,33 @@ test('зарядка до рації: номер вказується при р�
   assert.equal(client.state.rows.find(r2 => r2.id === 1).quantity, 3)
 })
 
+test('переноски: вид необов’язковий, без виду записи зливаються, у інших пунктів вид обов’язковий', async () => {
+  const { client, repo } = setup()
+  const form = baseForm({ presetName: 'Переноски', category: 'Живлення', quantity: 2 })
+  assert.equal((await add(form, repo)).message, 'Додано на позицію!')
+  assert.equal(client.state.rows[0].item_name, 'Переноски')
+  await add({ ...form, quantity: 3 }, repo)
+  await add({ ...form, variant: 'Мала', quantity: 1 }, repo)
+  assert.deepEqual(Object.fromEntries(client.state.rows.map(x => [x.item_name, x.quantity])),
+    { 'Переноски': 5, 'Переноски — Мала': 1 })
+  assert.equal((await add(baseForm({ presetName: 'Скиди', category: 'БПЛА' }), repo)).message, 'Оберіть вид')
+})
+
+test('переноски: вид можна вказати або прибрати при редагуванні', async () => {
+  const item = { id: 1, position_name: POS, item_name: 'Переноски', category: 'Живлення', status: 'На позиції', quantity: 2, notes: '', variant: null, brand: null, serial: null }
+  const { client, repo } = setup([item])
+  const preset = presetOf(item.item_name)
+  const ok = { confirm: () => true }
+  assert.equal(editFormFromItem(item).variant, '')
+  assert.equal((await saveEdit(item, preset, { ...editFormFromItem(item), notes: 'нова' }, ok, repo)).message, 'Зміни збережено')
+  assert.equal(client.state.rows[0].item_name, 'Переноски')
+  await saveEdit(client.state.rows[0], preset, { ...editFormFromItem(client.state.rows[0]), variant: 'Мала' }, ok, repo)
+  assert.equal(client.state.rows[0].item_name, 'Переноски — Мала')
+  await saveEdit(client.state.rows[0], preset, { ...editFormFromItem(client.state.rows[0]), variant: '' }, ok, repo)
+  assert.equal(client.state.rows[0].item_name, 'Переноски')
+  assert.equal(client.state.rows[0].variant, null)
+})
+
 test('помилки бази повертаються з тими самими текстами', async () => {
   let s = setup([], { failOn: { op: 'insert', error: { code: '23505', message: 'violates items_unique_serial' } } })
   assert.equal((await add(baseForm(), s.repo)).message, 'Такий серійний номер уже є')

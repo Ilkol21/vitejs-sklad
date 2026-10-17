@@ -8,8 +8,10 @@ import { buildReportRows } from '../src/domain/report.js'
 import { changeStatus } from '../src/services/itemActionsService.js'
 import { POS, OTHER, setup } from './helpers/setup.mjs'
 
+const CATALOG_NAMES = ['Генератор', 'Кірка', 'Лопати', 'Сокира']
+
 const row = (id, status, over = {}) => ({
-  id, position_name: POS, item_name: `Генератор ${id}`, category: 'Живлення', status,
+  id, position_name: POS, item_name: CATALOG_NAMES[(id - 1) % CATALOG_NAMES.length], category: 'Живлення', status,
   quantity: 1, notes: '', variant: null, brand: null, serial: null, ...over
 })
 
@@ -71,4 +73,22 @@ test('компонент перемикача: три вкладки з лічи
   assert.match(html, /На ремонт<\/span><span class="status-tab-count">0</)
   assert.equal((html.match(/status-tab active/g) || []).length, 1)
   assert.match(html, /status-tab active status-orange[^>]*aria-selected="true"[^>]*><span[^>]*>🟡 Потреба/)
+})
+
+
+test('лічильник рахує пункти каталогу: варіанти й номери дають один пункт, кількість і павук/роутер не впливають', () => {
+  const items = ref([
+    row(1, 'На позиції', { item_name: 'Рація — Motorola, S/N 1', brand: 'Motorola', serial: '1' }),
+    row(2, 'На позиції', { item_name: 'Рація — Hytera, S/N 2', brand: 'Hytera', serial: '2' }),
+    row(3, 'На позиції', { item_name: 'Дрони — Mavic 3T', variant: 'Mavic 3T', quantity: 5 }),
+    row(4, 'На позиції', { item_name: 'Дрони — Mavic 4 Pro', variant: 'Mavic 4 Pro', quantity: 0 }),
+    row(5, 'На позиції', { item_name: 'Кірка', quantity: 0 }),
+    row(6, 'На позиції', { item_name: 'Павук', quantity: 3 }),
+    row(7, 'На позиції', { item_name: 'Роутер Старлінк', quantity: 1 }),
+    row(8, 'Потреба', { item_name: 'Рація — Motorola, S/N 3', brand: 'Motorola', serial: '3' }),
+    row(9, 'На ремонт', { item_name: 'Дрони — Mavic 3T "Панда"', variant: 'Mavic 3T "Панда"' })
+  ])
+  const { counts } = useStatusFilter(items)
+  // На позиції: Рація, Дрони, Кірка (павук і роутер не в каталозі)
+  assert.deepEqual(counts.value, { 'На позиції': 3, 'Потреба': 1, 'На ремонт': 1 })
 })

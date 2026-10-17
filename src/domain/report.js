@@ -1,6 +1,7 @@
 import { POSITIONS, STATUS, STATUS_OPTIONS } from '../config/app.js'
 import { round2 } from '../utils/number.js'
 import { itemParts } from './itemName.js'
+import { groupDroneRows } from './droneGroups.js'
 import { presetOf, unitOf, isPresenceRow, mergesModel, displaySerial } from './catalog.js'
 
 const positionIndex = name => {
@@ -16,32 +17,49 @@ const statusIndex = status => {
 
 const compareText = (a, b) => String(a).localeCompare(String(b), 'uk', { numeric: true })
 
-// Рядки звіту: окремі колонки для виду, марки, серійного номера, кількості й одиниці виміру
-// Для планшетів назва пристрою й модель йдуть в одну колонку «Марка»
+// Рядок звіту для одного запису: окремі колонки для виду, марки, серійного номера, кількості й одиниці виміру.
+// Для планшетів назва пристрою й модель йдуть в одну колонку «Марка». «Імена дронів» заповнюються лише для групи дронів.
+const reportRow = (item, p) => ({
+  'Позиція': item.position_name,
+  'Категорія': item.category,
+  'Найменування': p.base,
+  'Вид / модель / назва': mergesModel(p.base) ? '' : p.detail,
+  'Марка': mergesModel(p.base) ? [p.brand, p.detail].filter(Boolean).join(' ') : p.brand,
+  'Серійний номер': displaySerial(p.base, p.serial),
+  'Статус': item.status,
+  'Кількість': isPresenceRow(item) ? '' : Number(item.quantity),
+  'Од.': isPresenceRow(item) ? '' : unitOf(item.item_name),
+  'Наявність': isPresenceRow(item)
+    ? (Number(item.quantity) > 0 ? 'Є' : 'НЕМАЄ')
+    : (Number(item.quantity) > 0 ? '' : 'НЕМАЄ'),
+  'Імена дронів': '',
+  'Примітки': item.notes || ''
+})
+
+// Рядок звіту для групи дронів однієї моделі: загальна кількість (вклюнно з іменними), імена — в окремій колонці
+const droneGroupRow = group => {
+  const first = group.items[0]
+  const row = reportRow({ ...first, quantity: group.total, notes: group.notes }, itemParts(first))
+  return {
+    ...row,
+    'Вид / модель / назва': group.model,
+    'Імена дронів': group.names.join(', ')
+  }
+}
+
+// Рядки звіту: дрони однієї моделі (на кожній позиції й статусі), у яких є іменні, зводяться в один рядок
 export const buildReportRows = list =>
-  (list || [])
-    .map(item => ({ item, p: itemParts(item) }))
+  groupDroneRows(list, { byPosition: true })
+    .map(entry => (entry.type === 'drones'
+      ? { item: entry.items[0], p: { ...itemParts(entry.items[0]), detail: entry.model, serial: '' }, entry }
+      : { item: entry.item, p: itemParts(entry.item), entry: null }))
     .sort((a, b) =>
       positionIndex(a.item.position_name) - positionIndex(b.item.position_name) ||
       statusIndex(a.item.status) - statusIndex(b.item.status) ||
       compareText(a.item.category, b.item.category) || compareText(a.p.base, b.p.base) ||
       compareText(a.p.detail, b.p.detail) || compareText(a.p.serial, b.p.serial) ||
       compareText(a.item.status, b.item.status))
-    .map(({ item, p }) => ({
-      'Позиція': item.position_name,
-      'Категорія': item.category,
-      'Найменування': p.base,
-      'Вид / модель / назва': mergesModel(p.base) ? '' : p.detail,
-      'Марка': mergesModel(p.base) ? [p.brand, p.detail].filter(Boolean).join(' ') : p.brand,
-      'Серійний номер': displaySerial(p.base, p.serial),
-      'Статус': item.status,
-      'Кількість': isPresenceRow(item) ? '' : Number(item.quantity),
-      'Од.': isPresenceRow(item) ? '' : unitOf(item.item_name),
-      'Наявність': isPresenceRow(item)
-        ? (Number(item.quantity) > 0 ? 'Є' : 'НЕМАЄ')
-        : (Number(item.quantity) > 0 ? '' : 'НЕМАЄ'),
-      'Примітки': item.notes || ''
-    }))
+    .map(({ item, p, entry }) => (entry ? droneGroupRow(entry) : reportRow(item, p)))
 
 // Підсумок: однакове майно рахується разом (KIT і серійні номери не розділяють групу).
 // «Разом є» = На позиції + На ремонт (це майно, яке є); «Потреба» окремо, бо це не наявність.

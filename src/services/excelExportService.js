@@ -3,7 +3,7 @@ import * as itemsRepository from '../api/itemsRepository.js'
 import { buildReportRows, buildSummaryRows, positionLabel } from '../domain/report.js'
 import { failure, success } from './result.js'
 
-const REPORT_COLUMN_WIDTHS = [18, 14, 28, 26, 16, 18, 12, 10, 6, 11, 28]
+const REPORT_COLUMN_WIDTHS = [18, 14, 28, 26, 16, 18, 12, 10, 6, 11, 28, 28]
 const SUMMARY_COLUMN_WIDTHS = [18, 14, 28, 26, 11, 11, 10, 10, 6, 11]
 const TOTAL_COLUMN_WIDTHS = [14, 14, 28, 26, 11, 11, 10, 10, 6, 11]
 

@@ -34,6 +34,9 @@ export const createItemsRepository = client => {
 
     insertItem: row => table().insert([row]),
 
+    // Кілька рядків одним запитом: або додаються всі, або жоден (якщо якийсь з них порушує унікальність)
+    insertItems: rows => table().insert(rows),
+
     updateItem: (id, changes) => table().update(changes).eq('id', id),
 
     deleteItem: id => table().delete().eq('id', id),
@@ -52,5 +55,5 @@ export const createItemsRepository = client => {
 const repository = createItemsRepository(supabase)
 
 export const {
-  fetchByPosition, fetchAll, fetchSameBase, findSameRow, insertItem, updateItem, deleteItem, subscribeToChanges
+  fetchByPosition, fetchAll, fetchSameBase, findSameRow, insertItem, insertItems, updateItem, deleteItem, subscribeToChanges
 } = repository

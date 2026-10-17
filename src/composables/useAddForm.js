@@ -34,9 +34,6 @@ export const useAddForm = (selectedPositionName, loadItems) => {
   // Перехід у режим «просто є»: значення беремо 1 (є) або 0 (немає)
   watch(noCount, on => { if (on) quantity.value = Number(quantity.value) > 0 ? 1 : 0 })
 
-  // Дрон з іменем завжди в одному екземплярі
-  watch(callsign, v => { if (String(v || '').trim()) quantity.value = 1 })
-
   const onPresetChange = () => {
     const preset = findPreset(selectedPresetItem.value)
     if (preset) category.value = preset.category

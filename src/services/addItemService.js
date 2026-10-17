@@ -1,12 +1,13 @@
 import * as itemsRepository from '../api/itemsRepository.js'
 import { round2 } from '../utils/number.js'
 import { findPreset, allowsDecimal, quantityColumns } from '../domain/catalog.js'
-import { cleanCallsign, nameWithDetail, nameWithSerial } from '../domain/itemName.js'
+import { nameWithDetail, nameWithSerial } from '../domain/itemName.js'
 import { isPlaceholderSerial, serialForColumn } from '../domain/serial.js'
 import { parseSegmentLength, parseSerialFields, validateQuantity } from '../domain/validation.js'
 import { addExtraItem, parseExtraQty } from './extraItemService.js'
 import { addKitItem } from './addKitService.js'
-import { findNamedDroneClash, findSerialClash, mergeIntoExisting } from './duplicateService.js'
+import { findSerialClash, mergeIntoExisting } from './duplicateService.js'
+import { addDroneItems } from './addDroneService.js'
 import { failure, insertErrorText } from './result.js'
 
 // Додавання майна на позицію.
@@ -39,6 +40,8 @@ export const addItem = async (form, ctx, repo = itemsRepository) => {
   let placeholderSerial = false
 
   if (preset && preset.kit) return addKitItem(preset, form, ctx, repo)
+  // Дрони: кількість довільна, імена через кому (кожне — окремий дрон)
+  if (preset && preset.callsign) return addDroneItems(preset, form, ctx, repo)
 
   // Комбінований облік (Лопасті): рядок «просто є / немає» без кількості (колонка no_count) або зі штуками
   const noCount = !!(preset && preset.presenceOrCount && form.noCount)
@@ -67,19 +70,8 @@ export const addItem = async (form, ctx, repo = itemsRepository) => {
     }
   } else if (preset && preset.variants) {
     if (!form.variant) return failure(`Оберіть ${preset.variantLabel || 'вид'}`)
-    let v = form.variant
-    if (preset.callsign) {
-      const nm = cleanCallsign(form.callsign)
-      if (nm) {
-        v = `${form.variant} "${nm}"`
-        qty = 1
-        const { taken, error: namedErr } = await findNamedDroneClash(preset, v, repo)
-        if (namedErr) return checkError(namedErr)
-        if (taken) return failure(`Дрон з іменем «${nm}» уже є: ${taken.position_name}`)
-      }
-    }
-    fullName = nameWithDetail(preset.name, v)
-    cols = { variant: v }
+    fullName = nameWithDetail(preset.name, form.variant)
+    cols = { variant: form.variant }
   } else if (preset && preset.freeName) {
     const n = form.customName.trim()
     if (!n) return failure('Вкажіть назву')

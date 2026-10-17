@@ -28,6 +28,9 @@ export const itemParts = item => {
 export const cleanCallsign = s =>
   String(s || '').replace(/["«»“”„]/g, '').replace(/\s+/g, ' ').trim().slice(0, MAX_CALLSIGN_LENGTH)
 
+// Список імен дронів через кому: «Панда, Лис» -> ['Панда', 'Лис']. Порожні імена відкидаються, кожне чиститься як окреме ім'я
+export const parseCallsigns = s => String(s || '').split(/[,;]/).map(cleanCallsign).filter(Boolean)
+
 // «Mavic 4 Pro "Панда"» -> { model: 'Mavic 4 Pro', name: 'Панда' }
 export const splitCallsign = s => {
   const m = String(s || '').match(/^(.*?)\s+"([^"]*)"\s*$/)

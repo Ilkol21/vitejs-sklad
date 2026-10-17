@@ -36,7 +36,7 @@ const {
         <option v-for="m in currentPreset.variants" :key="m" :value="m">{{ m }}</option>
       </select>
 
-      <input v-if="currentPreset && currentPreset.callsign" v-model="callsign" maxlength="40" placeholder="Ім'я дрона (необов'язково), напр. Панда" class="styled-input" />
+      <input v-if="currentPreset && currentPreset.callsign" v-model="callsign" placeholder="Імена дронів через кому (необов'язково), напр. Панда, Лис" class="styled-input" />
 
       <input v-if="currentPreset && currentPreset.freeName" v-model="customName" placeholder="Назва *" class="styled-input" />
 
@@ -65,7 +65,7 @@ const {
           <option :value="1">Є</option>
           <option :value="0">Немає</option>
         </select>
-        <input v-else type="number" v-model="quantity" :disabled="currentPreset && (currentPreset.needsSerial || currentPreset.kit || (currentPreset.callsign && callsign.trim()))" min="0" :step="currentPreset && currentPreset.unit ? '0.1' : '1'" :placeholder="currentPreset && currentPreset.unit === 'л' ? 'Літри' : (currentPreset && currentPreset.unit === 'м' ? 'Метри' : (currentPreset && currentPreset.lengthM ? 'К-ть відрізків' : 'К-ть'))" class="styled-input qty-input font-bold" />
+        <input v-else type="number" v-model="quantity" :disabled="currentPreset && (currentPreset.needsSerial || currentPreset.kit)" min="0" :step="currentPreset && currentPreset.unit ? '0.1' : '1'" :placeholder="currentPreset && currentPreset.unit === 'л' ? 'Літри' : (currentPreset && currentPreset.unit === 'м' ? 'Метри' : (currentPreset && currentPreset.lengthM ? 'К-ть відрізків' : 'К-ть'))" class="styled-input qty-input font-bold" />
         <input v-model="notes" placeholder="Примітки / номер" class="styled-input notes-input" />
       </div>
 

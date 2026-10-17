@@ -4,7 +4,7 @@
 // extra: необов'язкова додаткова позиція з кількістю (роутер до Старлінка, павук до рації), зберігається окремим записом
 // variants: список видів (обов'язковий вибір); freeName: вільна назва; needsSerial: серійний номер (noBrand: без марки);
 // hasModel: окреме поле «Модель» (brandLabel: підпис поля марки/назви); в Excel назва і модель йдуть в одну колонку «Марка»
-// callsign: необов'язкове ім'я дрона (у назві пишеться в лапках, напр. Mavic 4 Pro "Панда")
+// callsign: необов'язкові імена дронів через кому (кожне в назві пишеться в лапках, напр. Mavic 4 Pro "Панда"), кількість дронів довільна
 // presence: без підрахунку, лише «Є / Немає» (у базі 1 або 0)
 // presenceOrCount: комбінований облік: кожен рядок або «просто є» (колонка no_count = true), або з кількістю
 // unit: одиниця виміру ('л'; за замовчуванням шт.); lengthM: довжина одного відрізка в метрах + кількість відрізків
@@ -31,7 +31,7 @@ export const PRESET_ITEMS = [
   { name: 'Пульти до дронів', category: 'БПЛА', variants: ['Для 4 Pro', 'Для Матріс', 'Для Outel', 'Для 3 серії'] },
   { name: 'Батарейки до дронів', category: 'БПЛА', variants: ['Аутель', 'Мавік 3', 'Матріс', 'Matrice шиті', 'Matrice не шиті', 'Мавік 4 Pro'] },
   { name: 'Планшети', category: 'БПЛА', needsSerial: true, hasModel: true, brandLabel: 'Назва пристрою' },
-  { name: 'Дрони', category: 'БПЛА', callsign: true, variantLabel: 'модель дрона', variants: ['Mavic 3 Pro', 'Mavic 3T', 'Mavic 3TA', 'Mavic 4 Pro', 'Matrice 4T', 'Outel', 'Matrice 4e'] },
+  { name: 'Дрони', category: 'БПЛА', callsign: true, variantLabel: 'модель дрона', variants: ['Mavic 3 Pro', 'Mavic 3T', 'Mavic 3TA', 'Mavic 4 Pro', 'Matrice 4T', 'Outel', 'Matrice 4e', 'Matrice'] },
   { name: 'Перехідники', category: 'Інше', variants: ['Для 3 серії', 'Для 4 Pro', 'Для Outel'] },
   { name: 'БК', category: 'Боєприпаси', variants: ['ВОГ-17', 'Патрони 5.56', 'Патрони 5.45'] },
   { name: 'Скиди', category: 'БПЛА', variants: ['Одинарний', 'Подвійний', 'Для 4 Pro', 'Для Матріс'] },

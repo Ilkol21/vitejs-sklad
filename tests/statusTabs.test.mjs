@@ -76,19 +76,32 @@ test('компонент перемикача: три вкладки з лічи
 })
 
 
-test('лічильник рахує пункти каталогу: варіанти й номери дають один пункт, кількість і павук/роутер не впливають', () => {
+test('лічильник рахує лише пункти каталогу з кількістю > 0; моделі й номери — один пункт; павук/роутер не враховуються', () => {
   const items = ref([
     row(1, 'На позиції', { item_name: 'Рація — Motorola, S/N 1', brand: 'Motorola', serial: '1' }),
     row(2, 'На позиції', { item_name: 'Рація — Hytera, S/N 2', brand: 'Hytera', serial: '2' }),
     row(3, 'На позиції', { item_name: 'Дрони — Mavic 3T', variant: 'Mavic 3T', quantity: 5 }),
     row(4, 'На позиції', { item_name: 'Дрони — Mavic 4 Pro', variant: 'Mavic 4 Pro', quantity: 0 }),
     row(5, 'На позиції', { item_name: 'Кірка', quantity: 0 }),
-    row(6, 'На позиції', { item_name: 'Павук', quantity: 3 }),
-    row(7, 'На позиції', { item_name: 'Роутер Старлінк', quantity: 1 }),
-    row(8, 'Потреба', { item_name: 'Рація — Motorola, S/N 3', brand: 'Motorola', serial: '3' }),
-    row(9, 'На ремонт', { item_name: 'Дрони — Mavic 3T "Панда"', variant: 'Mavic 3T "Панда"' })
+    row(6, 'На позиції', { item_name: 'Світло', quantity: 0 }),
+    row(7, 'На позиції', { item_name: 'Павук', quantity: 3 }),
+    row(8, 'На позиції', { item_name: 'Роутер Старлінк', quantity: 1 }),
+    row(9, 'Потреба', { item_name: 'Рація — Motorola, S/N 3', brand: 'Motorola', serial: '3', quantity: 0 }),
+    row(10, 'Потреба', { item_name: 'Лопати', quantity: 2 }),
+    row(11, 'На ремонт', { item_name: 'Дрони — Mavic 3T "Панда"', variant: 'Mavic 3T "Панда"' })
   ])
   const { counts } = useStatusFilter(items)
-  // На позиції: Рація, Дрони, Кірка (павук і роутер не в каталозі)
-  assert.deepEqual(counts.value, { 'На позиції': 3, 'Потреба': 1, 'На ремонт': 1 })
+  // На позиції: Рація, Дрони (Кірка й Світло з 0 не рахуються; павук і роутер не в каталозі)
+  // Потреба: Рація з 0 не рахується, Лопати — так
+  assert.deepEqual(counts.value, { 'На позиції': 2, 'Потреба': 1, 'На ремонт': 1 })
+})
+
+test('пункт з кількома рядками рахується, якщо хоч один рядок у статусі має кількість > 0', () => {
+  const items = ref([
+    row(1, 'На позиції', { item_name: 'Дрони — Mavic 3T', variant: 'Mavic 3T', quantity: 0 }),
+    row(2, 'На позиції', { item_name: 'Дрони — Mavic 4 Pro', variant: 'Mavic 4 Pro', quantity: 1 }),
+    row(3, 'Потреба', { item_name: 'Дрони — Mavic 3T', variant: 'Mavic 3T', quantity: 0 })
+  ])
+  const { counts } = useStatusFilter(items)
+  assert.deepEqual(counts.value, { 'На позиції': 1, 'Потреба': 0, 'На ремонт': 0 })
 })

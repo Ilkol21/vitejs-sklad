@@ -7,14 +7,14 @@ import { presetOf } from '../domain/catalog.js'
 export const useStatusFilter = items => {
   const activeStatus = ref(STATUS.OK)
 
-  // Лічильник вкладки = кількість пунктів зі списку майна (каталогу), які є в цьому статусі:
-  // моделі, номери та KIT однієї назви дають один пункт, кількість (вклюнно з 0) не впливає.
-  // Додаткові позиції (Павук, Роутер Старлінк) у каталозі не є, тому не рахуються.
+  // Лічильник вкладки = кількість пунктів зі списку майна (каталогу), які є в цьому статусі в наявності:
+  // моделі, номери та KIT однієї назви дають один пункт. Майно з кількістю 0 («немає», у «Є / Немає» — «Немає»)
+  // не рахується. Додаткові позиції (Павук, Роутер Старлінк) у каталозі немає, тому не рахуються.
   const counts = computed(() => {
     const names = Object.fromEntries(STATUS_OPTIONS.map(o => [o.value, new Set()]))
     for (const item of items.value) {
       const preset = presetOf(item.item_name)
-      if (preset && item.status in names) names[item.status].add(preset.name)
+      if (preset && item.status in names && Number(item.quantity) > 0) names[item.status].add(preset.name)
     }
     return Object.fromEntries(Object.entries(names).map(([status, set]) => [status, set.size]))
   })

@@ -1,6 +1,7 @@
 <script setup>
 import { toRef, computed } from 'vue'
 import { PRESET_ITEMS } from '../config/presets.js'
+import { STATUS } from '../config/app.js'
 import { useAddForm } from '../composables/useAddForm.js'
 import StatusOptions from './StatusOptions.vue'
 import SerialField from './SerialField.vue'
@@ -15,6 +16,12 @@ const {
   selectedPresetItem, status, quantity, noCount, notes, brand, serial, variant, deviceModel, callsign,
   customName, kitNumbers, lengthM, extraQty, currentPreset, onPresetChange, submit
 } = useAddForm(toRef(props, 'positionName'), () => emit('saved', status.value))
+
+// «Є / Немає» для статусу «Потреба» замінюється необов'язковим полем кількості
+const presenceNeed = computed(() => {
+  const p = currentPreset.value
+  return status.value === STATUS.NEED && !!p && (!!p.presence || (!!p.presenceOrCount && noCount.value))
+})
 
 // Кількість заблокована (завжди 1) для серійних номерів; у пункта з необов'язковим S/N — лише коли номер вписано
 const quantityLocked = computed(() => {
@@ -70,7 +77,8 @@ const quantityLocked = computed(() => {
       </select>
 
       <div class="qty-notes-row">
-        <select v-if="currentPreset && (currentPreset.presence || (currentPreset.presenceOrCount && noCount))" v-model.number="quantity" class="styled-select qty-input presence-select">
+        <input v-if="presenceNeed" type="number" v-model="quantity" min="0" step="1" placeholder="К-ть (необов'язково)" class="styled-input qty-input font-bold" />
+        <select v-else-if="currentPreset && (currentPreset.presence || (currentPreset.presenceOrCount && noCount))" v-model.number="quantity" class="styled-select qty-input presence-select">
           <option :value="1">Є</option>
           <option :value="0">Немає</option>
         </select>

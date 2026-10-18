@@ -1,4 +1,4 @@
-import { changeQuantity, changeStatus, removeItem } from '../services/itemActionsService.js'
+import { changeQuantity, changePresence, changeStatus, removeItem } from '../services/itemActionsService.js'
 import { exportExcel } from '../services/excelExportService.js'
 import { applyResult } from './applyResult.js'
 
@@ -8,6 +8,10 @@ export const useItemActions = (items, loadItems, { reportPosition, unitName }) =
 
   const updateItemQty = async (id, newQty) => {
     applyResult(await changeQuantity(id, findItem(id), newQty), { loadItems })
+  }
+
+  const updateItemPresence = async (id, choice) => {
+    applyResult(await changePresence(findItem(id), choice), { loadItems })
   }
 
   const updateItemStatus = async (id, newStatus) => {
@@ -22,5 +26,5 @@ export const useItemActions = (items, loadItems, { reportPosition, unitName }) =
     applyResult(await exportExcel({ reportPosition: reportPosition.value, unitName: unitName.value }))
   }
 
-  return { updateItemQty, updateItemStatus, deleteItem, downloadReport }
+  return { updateItemQty, updateItemPresence, updateItemStatus, deleteItem, downloadReport }
 }

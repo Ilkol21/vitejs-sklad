@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { addItem } from '../src/services/addItemService.js'
 import { saveEdit } from '../src/services/editItemService.js'
 import { editFormFromItem } from '../src/services/editFormService.js'
-import { changeStatus } from '../src/services/itemActionsService.js'
+import { changeStatus, changePresence, changeQuantity } from '../src/services/itemActionsService.js'
 import { buildReportRows, buildSummaryRows } from '../src/domain/report.js'
 import { presetOf, isPresenceRow, qtyText } from '../src/domain/catalog.js'
 import { POS, baseForm, setup } from './helpers/setup.mjs'
@@ -159,4 +159,89 @@ test('Excel: однакове майно з різними S/N — один ря
   assert.equal(moto['Серійний номер'], '123, 456')
   assert.equal(rows.find(r => r['Марка'] === 'Baofeng')['Серійний номер'], '1')
   assert.equal(rows.find(r => r['Статус'] === 'На ремонт')['Серійний номер'], '789')
+})
+
+const light = (id, status, quantity, over = {}) => ({
+  id, position_name: POS, item_name: 'Світло', category: 'Живлення', status, quantity, notes: '', variant: null, brand: null, serial: null, ...over
+})
+
+test('«Є / Немає»: у «На позиції» список міняє лише кількість, «Потреба» переносить у статус «Потреба»', async () => {
+  const { client, repo } = setup([light(1, 'На позиції', 1)])
+  assert.equal((await changePresence(client.state.rows[0], '0', repo)).reload, true)
+  assert.deepEqual([client.state.rows[0].status, client.state.rows[0].quantity], ['На позиції', 0])
+  assert.deepEqual(await changePresence(client.state.rows[0], '0', repo), {})
+  const need = await changePresence(client.state.rows[0], 'need', repo)
+  assert.equal(need.message, 'Переміщено в «Потреба»')
+  assert.deepEqual([client.state.rows[0].status, client.state.rows[0].quantity], ['Потреба', 0])
+})
+
+test('«Потреба»: кількість необов’язкова, можна вказати або прибрати, а вихід з «Потреби» робить «Є»', async () => {
+  const { client, repo } = setup([light(1, 'На позиції', 1)])
+  await changePresence(client.state.rows[0], 'need', repo)
+  await changeQuantity(1, client.state.rows[0], '4', repo)
+  assert.deepEqual([client.state.rows[0].status, client.state.rows[0].quantity], ['Потреба', 4])
+  await changeQuantity(1, client.state.rows[0], '0', repo)
+  assert.equal(client.state.rows[0].quantity, 0)
+  await changeQuantity(1, client.state.rows[0], '2', repo)
+  const back = await changeStatus(client.state.rows[0], 'На позиції', repo)
+  assert.equal(back.reload, true)
+  assert.deepEqual([client.state.rows[0].status, client.state.rows[0].quantity], ['На позиції', 1])
+  // без змін для рядка з кількістю: статус міняється, кількість та же
+  const cnt = setup([row(7, { quantity: 5 })])
+  await changeStatus(cnt.client.state.rows[0], 'Потреба', cnt.repo)
+  assert.deepEqual([cnt.client.state.rows[0].status, cnt.client.state.rows[0].quantity], ['Потреба', 5])
+})
+
+test('«Є / Немає»: «Потреба» зливається з рядком у «Потребі» (береться більше), «На ремонт» не змінюється вибором «Є»', async () => {
+  const { client, repo } = setup([light(1, 'На позиції', 1), light(2, 'Потреба', 3)])
+  const r = await changePresence(client.state.rows[0], 'need', repo)
+  assert.equal(r.message, "Об'єднано з наявним рядком «Потреба»")
+  assert.equal(client.state.rows.length, 1)
+  assert.deepEqual([client.state.rows[0].id, client.state.rows[0].status, client.state.rows[0].quantity], [2, 'Потреба', 3])
+  const rep = setup([light(3, 'На ремонт', 0)])
+  await changePresence(rep.client.state.rows[0], '1', rep.repo)
+  assert.deepEqual([rep.client.state.rows[0].status, rep.client.state.rows[0].quantity], ['На ремонт', 1])
+})
+
+test('нове майно зі статусом «Потреба»: кількість необов’язкова, порожня = 0, зливання бере більше', async () => {
+  const { client, repo } = setup()
+  const form = baseForm({ presetName: 'Світло', category: 'Живлення', status: 'Потреба', quantity: '' })
+  assert.equal((await add(form, repo)).message, 'Додано на позицію!')
+  assert.deepEqual([client.state.rows[0].status, client.state.rows[0].quantity], ['Потреба', 0])
+  assert.equal((await add({ ...form, quantity: 3 }, repo)).message, 'Світло: потрібно 3')
+  assert.equal((await add({ ...form, quantity: 2 }, repo)).message, 'Світло: потрібно 3')
+  assert.equal(client.state.rows.length, 1)
+  assert.equal(client.state.rows[0].quantity, 3)
+  // «На позиції» поводиться як раніше: Є / Немає
+  assert.equal((await add({ ...form, status: 'На позиції', quantity: 1 }, repo)).message, 'Додано на позицію!')
+  assert.equal(client.state.rows[1].quantity, 1)
+})
+
+test('таблиця: у «На позиції» список Є / Немає / Потреба, у «Потребі» — поле кількості; лічильник рахує рядок «Потреби»', async () => {
+  const { createSSRApp, ref } = await import('vue')
+  const { renderToString } = await import('vue/server-renderer')
+  const { default: ItemsTable } = await import('../src/components/ItemsTable.vue')
+  const { useStatusFilter } = await import('../src/composables/useStatusFilter.js')
+  const counts = { 'На позиції': 0, 'Потреба': 1, 'На ремонт': 0 }
+  const ok = await renderToString(createSSRApp(ItemsTable, { status: 'На позиції', counts, items: [light(2, 'На позиції', 1)] }))
+  assert.match(ok, /<option value="need">Потреба<\/option>/)
+  assert.match(ok, /presence-select status-green/)
+  const need = await renderToString(createSSRApp(ItemsTable, { status: 'Потреба', counts, items: [light(1, 'Потреба', 0)] }))
+  assert.doesNotMatch(need, /presence-select/)
+  assert.doesNotMatch(need, /value="need"/)
+  assert.match(need, /placeholder="К-ть"/)
+  const items = ref([light(1, 'Потреба', 0), light(2, 'На позиції', 0)])
+  assert.deepEqual(useStatusFilter(items).counts.value, { 'На позиції': 0, 'Потреба': 1, 'На ремонт': 0 })
+})
+
+test('Excel: рядок «Є / Немає» у «Потребі» показує кількість «скільки потрібно», без кількості — порожньо', () => {
+  const out = buildReportRows([light(1, 'Потреба', 3), light(2, 'Потреба', 0, { item_name: 'Стяжки' }), light(3, 'На позиції', 1, { item_name: 'Посуд' })])
+  const by = Object.fromEntries(out.map(r => [r['Найменування'], r]))
+  // «Потреба» у звіті так само, як у застосунку: без «НЕМАЄ», з кількістю або без
+  assert.deepEqual([by['Світло']['Кількість'], by['Світло']['Наявність'], by['Світло']['Статус']], [3, 'ПОТРЕБА', 'Потреба'])
+  assert.deepEqual([by['Стяжки']['Кількість'], by['Стяжки']['Наявність'], by['Стяжки']['Статус']], ['', 'ПОТРЕБА', 'Потреба'])
+  const sum = Object.fromEntries(buildSummaryRows([light(1, 'Потреба', 0), light(2, 'На позиції', 0, { item_name: 'Стяжки' })], true).map(g => [g['Найменування'], g]))
+  assert.equal(sum['Світло']['Наявність'], 'ПОТРЕБА')
+  assert.equal(sum['Стяжки']['Наявність'], 'НЕМАЄ')
+  assert.deepEqual([by['Посуд']['Кількість'], by['Посуд']['Наявність']], ['', 'Є'])
 })

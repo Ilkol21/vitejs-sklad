@@ -23,7 +23,7 @@ const { unitName, saveUnitName } = useUnitName()
 const { items, loadItems } = useItems(selectedPositionName)
 const { activeStatus, counts, visibleItems } = useStatusFilter(items)
 const { editForm, editingItem, editPreset, startEdit, cancelEdit, submitEdit } = useEditForm(items, loadItems)
-const { updateItemQty, updateItemStatus, deleteItem, downloadReport } = useItemActions(items, loadItems, { reportPosition, unitName })
+const { updateItemQty, updateItemPresence, updateItemStatus, deleteItem, downloadReport } = useItemActions(items, loadItems, { reportPosition, unitName })
 const { group, openGroup, closeGroup } = useDroneGroup(items)
 
 // Після додавання перемикач показує статус доданого рядка, щоб його було видно
@@ -75,6 +75,7 @@ watch(selectedPositionName, pos => {
         :items="visibleItems"
         :counts="counts"
         @update-qty="updateItemQty"
+        @update-presence="updateItemPresence"
         @update-status="updateItemStatus"
         @edit="startEdit"
         @delete="deleteItem"

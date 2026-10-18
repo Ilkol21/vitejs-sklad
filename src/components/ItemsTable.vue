@@ -1,5 +1,5 @@
 <script setup>
-import { STATUS_OPTIONS } from '../config/app.js'
+import { STATUS, STATUS_OPTIONS } from '../config/app.js'
 import { computed } from 'vue'
 import { isPresenceRow, allowsDecimal, unitOf } from '../domain/catalog.js'
 import { groupItemRows, serialsText } from '../domain/serialGroups.js'
@@ -14,11 +14,18 @@ const props = defineProps({
 // Вибраний статус: таблиця показує лише його рядки
 const status = defineModel('status', { type: String, required: true })
 
-defineEmits(['update-qty', 'update-status', 'edit', 'delete', 'open-group'])
+defineEmits(['update-qty', 'update-presence', 'update-status', 'edit', 'delete', 'open-group'])
 
 // Дрони однієї моделі, у яких є іменні, і однакове майно з різними серійними номерами
 // показуються одним рядком з загальною кількістю
 const entries = computed(() => groupItemRows(props.items))
+
+// Рядок «Є / Немає» у статусі «Потреба» має необов'язкове поле кількості замість списку:
+// порожнє поле означає «просто потрібно» (кількість 0)
+const needsCount = item => isPresenceRow(item) && item.status === STATUS.NEED
+const presenceValue = item => (Number(item.quantity) > 0 ? '1' : '0')
+const presenceClass = item => (Number(item.quantity) > 0 ? 'status-green' : 'status-red')
+const needQty = value => (String(value).trim() === '' ? 0 : value)
 
 const statusClass = value => STATUS_OPTIONS.find(o => o.value === value)?.cssClass
 </script>
@@ -59,7 +66,7 @@ const statusClass = value => STATUS_OPTIONS.find(o => o.value === value)?.cssCla
             </td>
             <td class="td-status"><span class="group-status" :class="statusClass(entry.status)">{{ entry.status }}</span></td>
             <td class="td-qty">
-              <b v-if="entry.presence">{{ entry.total > 0 ? 'Є' : 'Немає' }}</b>
+              <b v-if="entry.presence">{{ entry.status === STATUS.NEED ? (entry.total > 0 ? entry.total : 'Потреба') : (entry.total > 0 ? 'Є' : 'Немає') }}</b>
               <template v-else><b>{{ entry.total }}</b><div class="qty-unit">{{ unitOf(entry.items[0].item_name) }}</div></template>
             </td>
             <td class="td-action">
@@ -76,9 +83,11 @@ const statusClass = value => STATUS_OPTIONS.find(o => o.value === value)?.cssCla
               </select>
             </td>
             <td class="td-qty">
-              <select v-if="isPresenceRow(entry.item)" :value="Number(entry.item.quantity) > 0 ? '1' : '0'" @change="e => $emit('update-qty', entry.item.id, e.target.value)" class="styled-select presence-select" :class="Number(entry.item.quantity) > 0 ? 'status-green' : 'status-red'">
+              <input v-if="needsCount(entry.item)" type="number" min="0" step="1" :value="Number(entry.item.quantity) > 0 ? entry.item.quantity : ''" placeholder="К-ть" title="Скільки потрібно (необов'язково)" @change="e => $emit('update-qty', entry.item.id, needQty(e.target.value))" class="styled-input qty-edit font-bold" />
+              <select v-else-if="isPresenceRow(entry.item)" :value="presenceValue(entry.item)" @change="e => $emit('update-presence', entry.item.id, e.target.value)" class="styled-select presence-select" :class="presenceClass(entry.item)">
                 <option value="1">Є</option>
                 <option value="0">Немає</option>
+                <option value="need">Потреба</option>
               </select>
               <input v-else type="number" min="0" :step="allowsDecimal(entry.item.item_name) ? '0.1' : '1'" :value="entry.item.quantity" @change="e => $emit('update-qty', entry.item.id, e.target.value)" class="styled-input qty-edit font-bold" />
               <div v-if="allowsDecimal(entry.item.item_name)" class="qty-unit">{{ unitOf(entry.item.item_name) }}</div>

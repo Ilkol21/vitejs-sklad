@@ -26,7 +26,7 @@ export const findSerialClash = async (preset, brand, serial, repo) => {
 }
 
 // Таке майно вже є на позиції з тим самим статусом: оновлюємо наявний рядок замість дубліката
-export const mergeIntoExisting = async (row, { preset, fullName, qty, notes, noCount = false }, repo) => {
+export const mergeIntoExisting = async (row, { preset, fullName, qty, notes, noCount = false, needCount = false }, repo) => {
   const combined = !!(preset && isPresenceOrCount(fullName))
   // У пункта з комбінованим обліком рядок має бути або «просто є», або з кількістю: змішувати не можна
   if (combined && !!row.no_count !== noCount) {
@@ -35,9 +35,12 @@ export const mergeIntoExisting = async (row, { preset, fullName, qty, notes, noC
       : `Уже є з кількістю: ${row.quantity} ${unitOf(fullName)}. Щоб позначити просто «Є», змініть облік у вікні редагування запису`)
   }
   if ((preset && preset.presence) || (combined && noCount)) {
-    const { error } = await repo.updateItem(row.id, { quantity: qty > 0 ? 1 : 0 })
+    // У «Потребі» кількість — скільки потрібно: беремо більше з наявного й нового
+    const next = needCount ? Math.max(Number(row.quantity) || 0, qty) : (qty > 0 ? 1 : 0)
+    const { error } = await repo.updateItem(row.id, { quantity: next })
     if (error) return failure('Помилка оновлення: ' + error.message)
-    return success(`${fullName}: ${qty > 0 ? 'є' : 'немає'}`, { reload: true, formPatch: { quantity: 1 } })
+    const text = needCount ? (next > 0 ? `потрібно ${next}` : 'потреба') : (qty > 0 ? 'є' : 'немає')
+    return success(`${fullName}: ${text}`, { reload: true, formPatch: { quantity: needCount ? '' : 1 } })
   }
   if (qty === 0) {
     return failure(`Уже є: ${row.quantity} ${unitOf(fullName)}. Щоб позначити, що немає, змініть кількість у таблиці на 0`)

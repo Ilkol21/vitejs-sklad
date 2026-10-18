@@ -19,6 +19,9 @@ const compareText = (a, b) => String(a).localeCompare(String(b), 'uk', { numeric
 
 // Рядок звіту для одного запису: окремі колонки для виду, марки, серійного номера, кількості й одиниці виміру.
 // Для планшетів назва пристрою й модель йдуть в одну колонку «Марка». «Імена дронів» заповнюються лише для групи дронів.
+// Рядок «Є / Немає» у «Потребі» має необов'язкову кількість «скільки потрібно»: вона йде в «Кількість», а не в «Наявність»
+const needsCount = item => isPresenceRow(item) && item.status === STATUS.NEED && Number(item.quantity) > 0
+
 const reportRow = (item, p) => ({
   'Позиція': item.position_name,
   'Категорія': item.category,
@@ -27,10 +30,11 @@ const reportRow = (item, p) => ({
   'Марка': mergesModel(p.base) ? [p.brand, p.detail].filter(Boolean).join(' ') : p.brand,
   'Серійний номер': displaySerial(p.base, p.serial),
   'Статус': item.status,
-  'Кількість': isPresenceRow(item) ? '' : Number(item.quantity),
-  'Од.': isPresenceRow(item) ? '' : unitOf(item.item_name),
+  'Кількість': isPresenceRow(item) && !needsCount(item) ? '' : Number(item.quantity),
+  'Од.': isPresenceRow(item) && !needsCount(item) ? '' : unitOf(item.item_name),
+  // Рядок «Є / Немає» у «Потребі» у звіті показує «ПОТРЕБА», як і у застосунку
   'Наявність': isPresenceRow(item)
-    ? (Number(item.quantity) > 0 ? 'Є' : 'НЕМАЄ')
+    ? (item.status === STATUS.NEED ? 'ПОТРЕБА' : (Number(item.quantity) > 0 ? 'Є' : 'НЕМАЄ'))
     : (Number(item.quantity) > 0 ? '' : 'НЕМАЄ'),
   'Імена дронів': '',
   'Примітки': item.notes || ''
@@ -95,6 +99,7 @@ export const buildSummaryRows = (list, withPosition) => {
         label,
         unit: unitOf(item.item_name),
         pres: true,
+        needMark: false,
         ok: 0,
         rep: 0,
         need: 0
@@ -103,6 +108,7 @@ export const buildSummaryRows = (list, withPosition) => {
     const g = groups.get(key)
     // Група показується як «Є / Немає» лише коли всі її рядки без кількості; у мішаній — кількості сумуються
     g.pres = g.pres && isPresenceRow(item)
+    if (item.status === STATUS.NEED && isPresenceRow(item)) g.needMark = true
     const q = Number(item.quantity) || 0
     if (item.status === STATUS.OK) g.ok = round2(g.ok + q)
     else if (item.status === STATUS.REPAIR) g.rep = round2(g.rep + q)
@@ -120,10 +126,11 @@ export const buildSummaryRows = (list, withPosition) => {
       'На позиції': g.pres ? '' : g.ok,
       'На ремонт': g.pres ? '' : g.rep,
       'Разом є': g.pres ? '' : round2(g.ok + g.rep),
-      'Потреба': g.pres ? '' : g.need,
+      'Потреба': g.pres ? (g.need > 0 ? g.need : '') : g.need,
       'Од.': g.pres ? '' : g.unit,
+      // Група «Є / Немає», де нічого немає у наявності, а є рядок «Потреба», показує «ПОТРЕБА»
       'Наявність': g.pres
-        ? (round2(g.ok + g.rep) > 0 ? 'Є' : 'НЕМАЄ')
+        ? (round2(g.ok + g.rep) > 0 ? 'Є' : (g.needMark ? 'ПОТРЕБА' : 'НЕМАЄ'))
         : (round2(g.ok + g.rep) > 0 ? '' : 'НЕМАЄ')
     }))
 }

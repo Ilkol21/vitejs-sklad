@@ -1,5 +1,6 @@
 import * as itemsRepository from '../api/itemsRepository.js'
 import { round2 } from '../utils/number.js'
+import { STATUS } from '../config/app.js'
 import { findPreset, allowsDecimal, quantityColumns } from '../domain/catalog.js'
 import { nameWithDetail, nameWithSerial } from '../domain/itemName.js'
 import { isPlaceholderSerial, serialForColumn } from '../domain/serial.js'
@@ -45,6 +46,9 @@ export const addItem = async (form, ctx, repo = itemsRepository) => {
 
   // Комбінований облік (Лопасті): рядок «просто є / немає» без кількості (колонка no_count) або зі штуками
   const noCount = !!(preset && preset.presenceOrCount && form.noCount)
+  // «Є / Немає» у «Потребі»: кількість необов'язкова (порожня = просто потрібно, 0)
+  const needCount = form.status === STATUS.NEED && !!preset && (!!preset.presence || noCount)
+  if (needCount && (form.quantity === '' || form.quantity === null)) qty = 0
 
   // Необов'язковий серійний номер (зарядка до рації): без номера це звичайне майно з кількістю
   const plainSerial = !!(preset && preset.needsSerial && preset.serialOptional && isBlank(form.serial))
@@ -92,7 +96,7 @@ export const addItem = async (form, ctx, repo = itemsRepository) => {
   }
 
   if (noCount) {
-    qty = Number(form.quantity) > 0 ? 1 : 0
+    qty = needCount ? qty : (Number(form.quantity) > 0 ? 1 : 0)
     cols = { ...cols, no_count: true }
   }
 
@@ -106,7 +110,7 @@ export const addItem = async (form, ctx, repo = itemsRepository) => {
     })
     if (sameErr) return checkError(sameErr)
     if (same && same.length) {
-      const merged = await mergeIntoExisting(same[0], { preset, fullName, qty, notes: form.notes, noCount }, repo)
+      const merged = await mergeIntoExisting(same[0], { preset, fullName, qty, notes: form.notes, noCount, needCount }, repo)
       if (merged.isError || !(extraCount > 0)) return merged
       const extra = await describeExtra(preset, extraCount, form, ctx, repo)
       return { ...merged, message: merged.message + extra.text, isError: extra.failed, formPatch: { ...merged.formPatch, serial: '', extraQty: '' } }

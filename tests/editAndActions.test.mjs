@@ -92,7 +92,9 @@ test('статус: зміна, злиття з наявним рядком, «�
   const l2 = row({ id: 6, item_name: 'Світло', status: 'Потреба', quantity: 0 })
   const p = setup([l1, l2])
   const r = await changeStatus(l1, 'Потреба', p.repo)
-  assert.equal(r.message, 'Об\'єднано з наявним рядком: тепер є')
+  // «Є / Немає» у «Потребу» йде без кількості (кількість там — «скільки потрібно»), тому зливання без «є»
+  assert.equal(r.message, 'Об\'єднано з наявним рядком «Потреба»')
+  assert.deepEqual(p.client.state.rows.map(x => [x.id, x.status, x.quantity]), [[6, 'Потреба', 0]])
   const plain = setup([row()])
   assert.deepEqual(await changeStatus(plain.client.state.rows[0], 'Потреба', plain.repo), { reload: true })
   assert.equal(plain.client.state.rows[0].status, 'Потреба')

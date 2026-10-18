@@ -1,4 +1,5 @@
 <script setup>
+import { STATUS } from '../config/app.js'
 import { isPresenceRow, allowsDecimal } from '../domain/catalog.js'
 import { memberSerial } from '../domain/serialGroups.js'
 import StatusOptions from './StatusOptions.vue'
@@ -23,7 +24,7 @@ defineEmits(['close', 'update-qty', 'update-status', 'edit', 'delete'])
         <select :value="item.status" @change="e => $emit('update-status', item.id, e.target.value)" class="styled-select group-member-status">
           <StatusOptions />
         </select>
-        <select v-if="isPresenceRow(item)" :value="Number(item.quantity) > 0 ? '1' : '0'" @change="e => $emit('update-qty', item.id, e.target.value)" class="styled-select presence-select">
+        <select v-if="isPresenceRow(item) && item.status !== STATUS.NEED" :value="Number(item.quantity) > 0 ? '1' : '0'" @change="e => $emit('update-qty', item.id, e.target.value)" class="styled-select presence-select">
           <option value="1">Є</option>
           <option value="0">Немає</option>
         </select>

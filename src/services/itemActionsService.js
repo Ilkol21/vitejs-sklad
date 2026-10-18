@@ -3,6 +3,7 @@ import { round2 } from '../utils/number.js'
 import { STATUS } from '../config/app.js'
 import { allowsDecimal, isPresenceRow, qtyText, quantityColumns } from '../domain/catalog.js'
 import { mergeRowQuantities } from '../domain/quantity.js'
+import { isDroneRow, droneName } from '../domain/droneGroups.js'
 import { failure, success, nothing } from './result.js'
 
 // Швидкі дії з рядком таблиці: кількість, статус, видалення.
@@ -21,14 +22,17 @@ export const changeQuantity = async (id, item, newQty, repo = itemsRepository) =
 // Такий самий рядок (позиція + назва + статус) не дублюємо: кількість зливається в наявний
 // Рядок «Є / Немає»: у «Потребі» його кількість — це скільки потрібно (необов'язково, 0 = просто потрібно).
 // Тому при переході в «Потребу» вона стає 0, а при виході з неї рядок знову «Є».
-export const changeStatus = async (item, newStatus, repo = itemsRepository) => {
+// needQty — кількість, яку людина вказала у вікні «Скільки потрібно?» (див. moveToNeed): з нею рядок іде в «Потребу».
+export const changeStatus = async (item, newStatus, repo = itemsRepository, { needQty } = {}) => {
   if (!item || item.status === newStatus) return nothing()
 
   const presence = isPresenceRow(item)
-  const toNeed = presence && newStatus === STATUS.NEED
+  const withQty = needQty !== undefined
+  const toNeed = (presence || withQty) && newStatus === STATUS.NEED
   const fromNeed = presence && item.status === STATUS.NEED
-  const quantity = toNeed ? 0 : (fromNeed ? 1 : Number(item.quantity))
-  const moved = presence ? { ...item, quantity } : item
+  const quantity = withQty ? needQty : (toNeed ? 0 : (fromNeed ? 1 : Number(item.quantity)))
+  const setsQty = presence || withQty
+  const moved = setsQty ? { ...item, quantity } : item
 
   const { data: same, error: sameErr } = await repo.findSameRow({
     positionName: item.position_name, itemName: item.item_name, status: newStatus,
@@ -49,9 +53,26 @@ export const changeStatus = async (item, newStatus, repo = itemsRepository) => {
     return success(`Об'єднано з наявним рядком${toNeed ? ' ' : ''}${text}`, { reload: true })
   }
 
-  const { error } = await repo.updateItem(item.id, presence ? { status: newStatus, quantity } : { status: newStatus })
+  const { error } = await repo.updateItem(item.id, setsQty ? { status: newStatus, quantity } : { status: newStatus })
   if (error) return failure('Помилка статусу: ' + error.message)
   return toNeed ? success('Переміщено в «Потреба»', { reload: true }) : { reload: true }
+}
+
+// Чи питати кількість перед переходом у «Потребу». Дрон з іменем — завжди 1 шт., тому переходить одразу.
+export const asksNeedQty = item => !!item && item.status !== STATUS.NEED && !(isDroneRow(item) && droneName(item))
+
+// Перехід у «Потребу» з вікна «Скільки потрібно?»: рядок переходить лише з вказаною кількістю.
+// Для «Є / Немає» кількість необов'язкова (порожньо = просто потрібно), для майна з кількістю — обов'язкова.
+// Помилка в самому полі лишає вікно відкритим, щоб виправити; після переходу або помилки бази вікно закривається.
+export const moveToNeed = async (item, value, repo = itemsRepository) => {
+  if (!item) return { close: true }
+  const empty = String(value ?? '').trim() === ''
+  const presence = isPresenceRow(item)
+  if (empty && !presence) return failure('Вкажіть, скільки потрібно')
+  const qty = empty ? 0 : round2(value)
+  if (!Number.isFinite(qty) || qty < 0 || (!presence && qty === 0)) return failure('Вкажіть, скільки потрібно')
+  if ((presence || !allowsDecimal(item.item_name)) && !Number.isInteger(qty)) return failure('Кількість має бути цілим числом')
+  return { ...(await changeStatus(item, STATUS.NEED, repo, { needQty: qty })), close: true }
 }
 
 // Випадаючий список рядка «Є / Немає» (у статусі «Потреба» його немає, там поле кількості):

@@ -10,7 +10,7 @@ import { POSITIONS } from '../src/config/app.js'
 test('App рендериться з усіма блоками', async () => {
   const html = await renderToString(createSSRApp(App))
   assert.match(html, /class="app-container"/)
-  assert.match(html, /Облік майна БПЛА/)
+  assert.match(html, /<h2>📦 Облік майна<\/h2>/)
   assert.match(html, /class="add-form"/)
   assert.match(html, /class="single-table-container"/)
   assert.match(html, /class="excel-footer-box"/)

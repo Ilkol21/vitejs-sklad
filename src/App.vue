@@ -15,6 +15,7 @@ import ItemsTable from './components/ItemsTable.vue'
 import EditItemModal from './components/EditItemModal.vue'
 import DroneGroupModal from './components/DroneGroupModal.vue'
 import SerialGroupModal from './components/SerialGroupModal.vue'
+import NeedQtyModal from './components/NeedQtyModal.vue'
 import ReportFooter from './components/ReportFooter.vue'
 
 const { toastMessage } = useToast()
@@ -23,7 +24,9 @@ const { unitName, saveUnitName } = useUnitName()
 const { items, loadItems } = useItems(selectedPositionName)
 const { activeStatus, counts, visibleItems } = useStatusFilter(items)
 const { editForm, editingItem, editPreset, startEdit, cancelEdit, submitEdit } = useEditForm(items, loadItems)
-const { updateItemQty, updateItemPresence, updateItemStatus, deleteItem, downloadReport } = useItemActions(items, loadItems, { reportPosition, unitName })
+const {
+  updateItemQty, updateItemPresence, updateItemStatus, needItem, confirmNeed, cancelNeed, deleteItem, downloadReport
+} = useItemActions(items, loadItems, { reportPosition, unitName })
 const { group, openGroup, closeGroup } = useDroneGroup(items)
 
 // Після додавання перемикач показує статус доданого рядка, щоб його було видно
@@ -52,9 +55,17 @@ watch(selectedPositionName, pos => {
       @cancel="cancelEdit"
     />
 
+    <NeedQtyModal
+      v-if="needItem"
+      :key="needItem.id"
+      :item="needItem"
+      @confirm="confirmNeed"
+      @cancel="cancelNeed"
+    />
+
     <component
       :is="group.type === 'serials' ? SerialGroupModal : DroneGroupModal"
-      v-if="group && !editingItem"
+      v-if="group && !editingItem && !needItem"
       :group="group"
       @close="closeGroup"
       @update-qty="updateItemQty"
@@ -63,7 +74,7 @@ watch(selectedPositionName, pos => {
       @delete="deleteItem"
     />
 
-    <h2>📦 Облік майна БПЛА (Онлайн / Реалтайм)</h2>
+    <h2>📦 Облік майна</h2>
 
     <PositionSelect v-model="selectedPositionName" />
 

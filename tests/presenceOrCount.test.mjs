@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { addItem } from '../src/services/addItemService.js'
 import { saveEdit } from '../src/services/editItemService.js'
 import { editFormFromItem } from '../src/services/editFormService.js'
-import { changeStatus, changePresence, changeQuantity } from '../src/services/itemActionsService.js'
+import { changeStatus, changePresence, changeQuantity, asksRepairQty, moveToRepair } from '../src/services/itemActionsService.js'
 import { buildReportRows, buildSummaryRows } from '../src/domain/report.js'
 import { presetOf, isPresenceRow, qtyText } from '../src/domain/catalog.js'
 import { POS, baseForm, setup } from './helpers/setup.mjs'
@@ -282,4 +282,26 @@ test('вікно «Скільки потрібно?»: для майна з кі
   const presence = await renderToString(createSSRApp(NeedQtyModal, { item: row(2, { item_name: 'Світло', variant: null, quantity: 0 }) }))
   assert.match(presence, /Скільки потрібно \(необов&#39;язково\)/)
   assert.match(presence, /placeholder="Просто потрібно"/)
+})
+
+test('на ремонт йде вказана кількість: віднімається від «На позиції» і додається до «На ремонт»', async () => {
+  const { client, repo } = setup([row(1, { quantity: 5 })])
+  assert.equal(asksRepairQty(client.state.rows[0]), true)
+  const r = await moveToRepair(client.state.rows[0], 2, repo)
+  assert.equal(r.close, true)
+  assert.equal(client.state.rows.find(x => x.id === 1).quantity, 3)
+  const repair = client.state.rows.find(x => x.status === 'На ремонт')
+  assert.equal(repair.quantity, 2)
+  await moveToRepair(client.state.rows.find(x => x.id === 1), 1, repo)
+  assert.equal(client.state.rows.find(x => x.status === 'На ремонт').quantity, 3)
+  assert.equal(client.state.rows.find(x => x.id === 1).quantity, 2)
+  assert.equal((await moveToRepair(client.state.rows.find(x => x.id === 1), 9, repo)).isError, true)
+  await moveToRepair(client.state.rows.find(x => x.id === 1), 2, repo)
+  assert.equal(client.state.rows.length, 1)
+  assert.equal(client.state.rows[0].quantity, 5)
+})
+
+test('дрон з іменем і майно із серійним номером йдуть на ремонт цілком, без запиту кількості', () => {
+  assert.equal(asksRepairQty(row(1, { item_name: 'Лопасті — Matrice', quantity: 1 })), false)
+  assert.equal(asksRepairQty(row(2, { quantity: 3, status: 'Потреба' })), false)
 })

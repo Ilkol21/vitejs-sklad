@@ -4,6 +4,7 @@ import { STATUS } from '../config/app.js'
 import { allowsDecimal, isPresenceRow, qtyText, quantityColumns } from '../domain/catalog.js'
 import { mergeRowQuantities } from '../domain/quantity.js'
 import { isDroneRow, droneName } from '../domain/droneGroups.js'
+import { itemParts } from '../domain/itemName.js'
 import { failure, success, nothing } from './result.js'
 
 // Швидкі дії з рядком таблиці: кількість, статус, видалення.
@@ -98,4 +99,41 @@ export const removeItem = async (item, id, { confirm = window.confirm.bind(windo
   if (!confirm(deleteConfirmText(item))) return nothing()
   const { error } = await repo.deleteItem(id)
   return error ? failure('Помилка видалення: ' + error.message) : success('Видалено', { reload: true })
+}
+
+// Чи питати, скільки йде на ремонт. Рядок із серійним номером і дрон з іменем — окремі одиниці, вони йдуть на ремонт
+// цілком; так само «Є / Немає» та рядок з однією штукою. Решта майна з кількістю більше за 1 переходить частиною.
+export const asksRepairQty = item =>
+  !!item && item.status === STATUS.OK && !isPresenceRow(item) && Number(item.quantity) > 1
+  && !itemParts(item).serial && !(isDroneRow(item) && droneName(item))
+
+// Перехід на ремонт із вікна «Скільки на ремонт?»: вказана кількість віднімається від рядка «На позиції»
+// і додається до такого ж рядка зі статусом «На ремонт» (або створює його). Уся кількість — переходить рядок цілком.
+export const moveToRepair = async (item, value, repo = itemsRepository) => {
+  if (!item) return { close: true }
+  const qty = round2(value)
+  const have = Number(item.quantity)
+  if (String(value ?? '').trim() === '' || !Number.isFinite(qty) || qty <= 0) return failure('Вкажіть, скільки на ремонт')
+  if (!allowsDecimal(item.item_name) && !Number.isInteger(qty)) return failure('Кількість має бути цілим числом')
+  if (qty > have) return failure(`На позиції лише ${qtyText(item.item_name, have, item.no_count)}`)
+  if (qty === have) return { ...(await changeStatus(item, STATUS.REPAIR, repo)), close: true }
+
+  const { data: same, error: sameErr } = await repo.findSameRow({
+    positionName: item.position_name, itemName: item.item_name, status: STATUS.REPAIR,
+    columns: quantityColumns(item.item_name, 'id, quantity'), excludeId: item.id
+  })
+  if (sameErr) return { ...failure('Помилка статусу: ' + sameErr.message), close: true, reload: true }
+
+  if (same && same.length) {
+    const total = round2(Number(same[0].quantity) + qty)
+    const { error } = await repo.updateItem(same[0].id, { quantity: total })
+    if (error) return { ...failure('Помилка статусу: ' + error.message), close: true, reload: true }
+  } else {
+    const { id, created_at, ...rest } = item
+    const { error } = await repo.insertItem({ ...rest, status: STATUS.REPAIR, quantity: qty })
+    if (error) return { ...failure('Помилка статусу: ' + error.message), close: true, reload: true }
+  }
+  const { error: leftErr } = await repo.updateItem(item.id, { quantity: round2(have - qty) })
+  if (leftErr) return { ...failure('Помилка оновлення: ' + leftErr.message), close: true, reload: true }
+  return { ...success(`На ремонт: ${qtyText(item.item_name, qty, false)}, на позиції лишилось ${qtyText(item.item_name, round2(have - qty), false)}`, { reload: true }), close: true }
 }

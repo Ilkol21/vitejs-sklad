@@ -16,6 +16,7 @@ import EditItemModal from './components/EditItemModal.vue'
 import DroneGroupModal from './components/DroneGroupModal.vue'
 import SerialGroupModal from './components/SerialGroupModal.vue'
 import NeedQtyModal from './components/NeedQtyModal.vue'
+import RepairQtyModal from './components/RepairQtyModal.vue'
 import ReportFooter from './components/ReportFooter.vue'
 
 const { toastMessage } = useToast()
@@ -25,7 +26,7 @@ const { items, loadItems } = useItems(selectedPositionName)
 const { activeStatus, counts, visibleItems } = useStatusFilter(items)
 const { editForm, editingItem, editPreset, startEdit, cancelEdit, submitEdit } = useEditForm(items, loadItems)
 const {
-  updateItemQty, updateItemPresence, updateItemStatus, needItem, confirmNeed, cancelNeed, deleteItem, downloadReport
+  updateItemQty, updateItemPresence, updateItemStatus, needItem, confirmNeed, cancelNeed, repairItem, confirmRepair, cancelRepair, deleteItem, downloadReport
 } = useItemActions(items, loadItems, { reportPosition, unitName })
 const { group, openGroup, closeGroup } = useDroneGroup(items)
 
@@ -63,9 +64,17 @@ watch(selectedPositionName, pos => {
       @cancel="cancelNeed"
     />
 
+    <RepairQtyModal
+      v-if="repairItem"
+      :key="repairItem.id"
+      :item="repairItem"
+      @confirm="confirmRepair"
+      @cancel="cancelRepair"
+    />
+
     <component
       :is="group.type === 'serials' ? SerialGroupModal : DroneGroupModal"
-      v-if="group && !editingItem && !needItem"
+      v-if="group && !editingItem && !needItem && !repairItem"
       :group="group"
       @close="closeGroup"
       @update-qty="updateItemQty"

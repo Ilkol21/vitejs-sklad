@@ -1,6 +1,6 @@
 import { ref } from 'vue'
 import { STATUS } from '../config/app.js'
-import { changeQuantity, changePresence, changeStatus, removeItem, asksNeedQty, moveToNeed } from '../services/itemActionsService.js'
+import { changeQuantity, changePresence, changeStatus, removeItem, asksNeedQty, moveToNeed, asksRepairQty, moveToRepair } from '../services/itemActionsService.js'
 import { exportExcel } from '../services/excelExportService.js'
 import { applyResult } from './applyResult.js'
 
@@ -10,6 +10,8 @@ export const useItemActions = (items, loadItems, { reportPosition, unitName }) =
 
   // Рядок, для якого відкрите вікно «Скільки потрібно?»: у «Потребу» він переходить лише після підтвердження
   const needItem = ref(null)
+  // Те саме для «На ремонт»: питаємо, скільки штук іде на ремонт
+  const repairItem = ref(null)
 
   const updateItemQty = async (id, newQty) => {
     applyResult(await changeQuantity(id, findItem(id), newQty), { loadItems })
@@ -19,6 +21,10 @@ export const useItemActions = (items, loadItems, { reportPosition, unitName }) =
     const item = findItem(id)
     if (newStatus === STATUS.NEED && asksNeedQty(item)) {
       needItem.value = item
+      return
+    }
+    if (newStatus === STATUS.REPAIR && asksRepairQty(item)) {
+      repairItem.value = item
       return
     }
     applyResult(await changeStatus(item, newStatus), { loadItems })
@@ -41,6 +47,17 @@ export const useItemActions = (items, loadItems, { reportPosition, unitName }) =
     loadItems()
   }
 
+  const closeRepair = () => { repairItem.value = null }
+
+  const confirmRepair = async qty => {
+    applyResult(await moveToRepair(repairItem.value, qty), { loadItems, closeEdit: closeRepair })
+  }
+
+  const cancelRepair = () => {
+    closeRepair()
+    loadItems()
+  }
+
   const deleteItem = async id => {
     applyResult(await removeItem(findItem(id), id), { loadItems })
   }
@@ -49,5 +66,5 @@ export const useItemActions = (items, loadItems, { reportPosition, unitName }) =
     applyResult(await exportExcel({ reportPosition: reportPosition.value, unitName: unitName.value }))
   }
 
-  return { updateItemQty, updateItemPresence, updateItemStatus, needItem, confirmNeed, cancelNeed, deleteItem, downloadReport }
+  return { updateItemQty, updateItemPresence, updateItemStatus, needItem, confirmNeed, cancelNeed, repairItem, confirmRepair, cancelRepair, deleteItem, downloadReport }
 }
